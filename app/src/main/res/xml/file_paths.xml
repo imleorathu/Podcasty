@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="youtube_downloads" path="youtube_downloads/" />
+    <cache-path name="local_artwork" path="local_artwork/" />
+    <cache-path name="shared_exports" path="shared_exports/" />
+    <external-files-path name="ext_music_exports" path="Music/" />
+</paths>

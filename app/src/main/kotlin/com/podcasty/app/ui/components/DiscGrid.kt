@@ -1,0 +1,71 @@
+/*
+ * Podcasty — Android Podcast Player
+ * Adapted from Airmedy (https://github.com/misa198/airmedy), licensed under GNU GPL v3.0.
+ */
+package com.podcasty.app.ui.components
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+
+data class DiscGridItem(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val artworkPath: String? = null,
+    val fallbackSymbol: String = MaterialSymbols.Podcasts,
+    val progressFraction: Float? = null,
+)
+
+fun LazyListScope.discGridItems(
+    items: List<DiscGridItem>,
+    columns: Int,
+    verticalItemPadding: Dp = 4.dp,
+    horizontalGap: Dp = 12.dp,
+    horizontalContentPadding: Dp = 0.dp,
+    onClick: ((String) -> Unit)? = null,
+    onLongClick: ((String) -> Unit)? = null,
+    itemWrapper: @Composable (DiscGridItem, Modifier, @Composable () -> Unit) -> Unit = { _, modifier, content ->
+        Box(modifier) { content() }
+    },
+) {
+    val rows = items.chunked(columns)
+    items(rows.size, key = { index -> rows[index].first().id }) { index ->
+        val row = rows[index]
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = horizontalContentPadding, vertical = verticalItemPadding),
+            horizontalArrangement = Arrangement.spacedBy(horizontalGap),
+        ) {
+            for (item in row) {
+                itemWrapper(item, Modifier.weight(1f)) {
+                    DiscCard(
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        artworkPath = item.artworkPath,
+                        fallbackSymbol = item.fallbackSymbol,
+                        progressFraction = item.progressFraction,
+                        onClick = onClick?.let { { it(item.id) } },
+                        onLongClick = onLongClick?.let { { it(item.id) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            repeat(columns - row.size) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+fun discGridColumnCount(contentWidth: Dp): Int =
+    ((contentWidth + 12.dp) / (150.dp + 12.dp)).toInt().coerceAtLeast(1)

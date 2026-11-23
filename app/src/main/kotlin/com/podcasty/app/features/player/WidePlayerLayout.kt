@@ -1,0 +1,138 @@
+/*
+ * Podcasty — Android Podcast Player
+ * Adapted from Airmedy (https://github.com/misa198/airmedy), licensed under GNU GPL v3.0.
+ */
+package com.podcasty.app.features.player
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+
+@Composable
+internal fun WidePlayerLayout(
+    selectedPanel: FullScreenPlayerPanel,
+    horizontalSwipeState: FullScreenPlayerSwipeState,
+    displayedHorizontalSwipeOffset: Float,
+    canNavigatePrevious: Boolean,
+    canNavigateNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    swipeEnabled: Boolean,
+    artwork: @Composable (Modifier) -> Unit,
+    metadata: @Composable () -> Unit,
+    controls: @Composable () -> Unit,
+    panelContent: @Composable (Dp) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().testTag("wide_player_safe_area")) {
+        val density = LocalDensity.current
+        val insets = WindowInsets.safeDrawing
+        val topInset = with(density) { insets.getTop(this).toDp() }
+        val bottomInset = with(density) { insets.getBottom(this).toDp() }
+        val extraTop = widePlayerExtraVerticalPadding(maxWidth.value, maxHeight.value, topInset.value).dp
+        val extraBottom = widePlayerExtraVerticalPadding(maxWidth.value, maxHeight.value, bottomInset.value).dp
+        val compact = maxHeight < 480.dp
+        val spacing = if (compact) 8.dp else 16.dp
+        val columnGap = if (compact) 0.dp else 48.dp * ((maxWidth - 840.dp) / 440.dp).coerceIn(0f, 1f)
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(top = extraTop, bottom = spacing + extraBottom)
+                .testTag("wide_player_layout"),
+        ) {
+            Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = if (compact) 8.dp else 20.dp)) {
+                FullScreenPlayerDragHandle()
+            }
+            Row(
+                Modifier
+                    .weight(1f)
+                    .then(if (compact) Modifier else Modifier.widthIn(max = 1280.dp))
+                    .fillMaxWidth()
+                    .align(Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(columnGap),
+            ) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(spacing),
+                ) {
+                    FullScreenPlayerSwipeTarget(
+                        testTag = "wide_player_swipe_target",
+                        swipeState = horizontalSwipeState,
+                        displayedOffset = displayedHorizontalSwipeOffset,
+                        onPrevious = onPrevious,
+                        onNext = onNext,
+                        canNavigatePrevious = canNavigatePrevious,
+                        canNavigateNext = canNavigateNext,
+                        enabled = swipeEnabled,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        if (compact) {
+                            BoxWithConstraints(Modifier.fillMaxSize()) {
+                                val artworkSize = minOf(maxHeight, (maxWidth - 16.dp).coerceAtLeast(0.dp) / 2)
+                                Row(
+                                    Modifier.fillMaxSize(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    artwork(Modifier.size(artworkSize).testTag(FullScreenPlayerArtworkTestTag))
+                                    Box(Modifier.weight(1f)) { metadata() }
+                                }
+                            }
+                        } else {
+                            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(32.dp)) {
+                                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    artwork(Modifier.size(minOf(maxWidth, maxHeight)).testTag(FullScreenPlayerArtworkTestTag))
+                                }
+                                metadata()
+                            }
+                        }
+                    }
+                    controls()
+                }
+                BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                    val panelWidth = maxWidth
+                    val alpha = remember(selectedPanel) { Animatable(0f) }
+                    LaunchedEffect(selectedPanel) { alpha.animateTo(1f, tween(220)) }
+                    key(selectedPanel) {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { this.alpha = alpha.value }
+                                .then(
+                                    if (selectedPanel == FullScreenPlayerPanel.Transcript) Modifier.padding(horizontal = 24.dp)
+                                    else Modifier,
+                                ),
+                        ) { panelContent(panelWidth) }
+                    }
+                }
+            }
+        }
+    }
+}

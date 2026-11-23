@@ -1,0 +1,19 @@
+{
+  "name": "podcasty-speech-backend",
+  "version": "1.0.0",
+  "description": "Secure WebSocket to Google Cloud Speech-to-Text bidirectional gRPC bridge for Podcasty live podcast captions (English, Tamil, and multilingual support).",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/server.test.js"
+  },
+  "dependencies": {
+    "@google-cloud/speech": "^6.7.0",
+    "ws": "^8.18.0",
+    "youtube-caption-extractor": "^1.10.3"
+  }
+}

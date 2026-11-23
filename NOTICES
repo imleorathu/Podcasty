@@ -1,0 +1,79 @@
+Podcasty — Android Podcast Player
+Licensed under the GNU General Public License v3.0 (see LICENSE).
+
+This application adapts the Android Jetpack Compose visual design, UI component
+architecture, liquid-glass navigation chrome, adaptive fullscreen player layouts,
+and living artwork shader from Airmedy (https://github.com/misa198/airmedy) by
+misa198, licensed under GNU GPL v3.0. All music-specific functionality has been
+replaced with podcast playback, local podcast library management, Room & DataStore
+persistence, and AndroidX Media3 / ExoPlayer integration.
+
+Third-Party Components:
+
+--------------------------------------------------------------------------------
+Airmedy
+https://github.com/misa198/airmedy
+--------------------------------------------------------------------------------
+Licensed under the GNU General Public License v3.0.
+UI architecture, theme tokens, adaptive player layouts, living artwork GLSL
+shader, and Material Symbols font-subsetting script are derived from Airmedy
+Mobile and retained under GPL-3.0.
+
+--------------------------------------------------------------------------------
+Simplex Noise GLSL
+Ashima Arts / Stefan Gustavson
+--------------------------------------------------------------------------------
+3D Simplex Noise GLSL implementation used in the living artwork background
+shader (MIT License).
+
+--------------------------------------------------------------------------------
+Material Symbols Rounded
+https://fonts.google.com/icons
+--------------------------------------------------------------------------------
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+AndroidX Libraries (Compose, Room, DataStore, Media3, Window, Lifecycle)
+--------------------------------------------------------------------------------
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Haze (dev.chrisbanes.haze)
+https://github.com/chrisbanes/haze
+--------------------------------------------------------------------------------
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Reorderable (sh.calvin.reorderable)
+https://github.com/Calvin-LL/Reorderable
+--------------------------------------------------------------------------------
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Vico (com.patrykandpatrick.vico)
+https://github.com/patrykandpatrick/vico
+--------------------------------------------------------------------------------
+Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Jellyfin AndroidX Media3 FFmpeg Decoder (org.jellyfin.media3:media3-ffmpeg-decoder)
+https://github.com/jellyfin/jellyfin-androidx-media
+--------------------------------------------------------------------------------
+Licensed under the GNU General Public License v3.0 (GPL-3.0).
+Provides software audio decoding via FFmpeg for AndroidX Media3 ExoPlayer.
+
+--------------------------------------------------------------------------------
+TagLib for Android (io.github.kyant0:taglib) & TagLib
+https://github.com/Kyant0/taglib | https://taglib.org
+--------------------------------------------------------------------------------
+Android Kotlin/JNI wrapper licensed under Apache License, Version 2.0.
+Underlying TagLib C++ library dual-licensed under GNU LGPL v2.1 and MPL v1.1.
+
+--------------------------------------------------------------------------------
+NewPipeExtractor (com.github.teamnewpipe:NewPipeExtractor)
+https://github.com/TeamNewPipe/NewPipeExtractor
+--------------------------------------------------------------------------------
+Licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later).
+Used on-device to resolve audio-only progressive streams for user-supplied YouTube
+URLs. Extraction is unofficial and may stop working when YouTube changes its
+player or API behavior.

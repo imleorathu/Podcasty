@@ -1,0 +1,154 @@
+/*
+ * Podcasty — Android Podcast Player
+ * Adapted from Airmedy (https://github.com/misa198/airmedy), licensed under GNU GPL v3.0.
+ */
+package com.podcasty.app.ui.theme
+
+import androidx.annotation.StringRes
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import com.podcasty.app.R
+
+enum class ThemeMode(val key: String, @StringRes val labelRes: Int) {
+    System("system", R.string.theme_system),
+    Light("light", R.string.theme_light),
+    Dark("dark", R.string.theme_dark),
+    Oled("oled", R.string.theme_oled),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): ThemeMode = entries.firstOrNull { it.key == key } ?: System
+    }
+}
+
+data class PodcastyColors(
+    val background: Color,
+    val playerBackdrop: Color,
+    val card: Color,
+    val glass: Color,
+    val glassOpaque: Color,
+    val glassElevated: Color,
+    val sliderInactive: Color,
+    val buttonSecondary: Color,
+    val textFieldClear: Color,
+    val borderGlass: Color,
+    val textMain: Color,
+    val textMuted: Color,
+    val primary: Color,
+    val onPrimary: Color,
+    val foregroundSubtle: Color,
+    val success: Color,
+    val navigationActive: Color,
+    val accentAmber: Color = Color(0xFFF59E0B),
+    val accentFuchsia: Color = Color(0xFFE879F9),
+    val accentFuchsiaSurface: Color = Color(0xFFD946EF),
+)
+
+internal val LightColors = PodcastyColors(
+    background = Color(0xFFF4F4F5),
+    playerBackdrop = Color(0xFF18181B),
+    card = Color.White,
+    glass = Color.White.copy(alpha = 0.4f),
+    glassOpaque = Color.White,
+    glassElevated = Color.White.copy(alpha = 0.90f),
+    sliderInactive = Color.White.copy(alpha = 0.10f),
+    buttonSecondary = Color(0xFFE4E4E7),
+    textFieldClear = Color(0xFFD4D4D8),
+    borderGlass = Color.Black.copy(alpha = 0.10f),
+    textMain = Color(0xFF0A0A0A),
+    textMuted = Color(0xFF52525B),
+    primary = Color(0xFFE11D48),
+    onPrimary = Color.White,
+    foregroundSubtle = Color.White.copy(alpha = 0.46f),
+    success = Color(0xFF16A34A),
+    navigationActive = Color.Black.copy(alpha = 0.08f),
+    accentAmber = Color(0xFFF59E0B),
+    accentFuchsia = Color(0xFFE879F9),
+    accentFuchsiaSurface = Color(0xFFD946EF),
+)
+
+internal val DarkColors = PodcastyColors(
+    background = Color(0xFF18181B),
+    playerBackdrop = Color(0xFF0A0A0A),
+    card = Color(0xFF27272A),
+    glass = Color(0xFF232326).copy(alpha = 0.4f),
+    glassOpaque = Color(0xFF232326),
+    glassElevated = Color(0xFF37373C).copy(alpha = 0.40f),
+    sliderInactive = Color.White.copy(alpha = 0.10f),
+    buttonSecondary = Color(0xFF52525B),
+    textFieldClear = Color(0xFF3F3F46),
+    borderGlass = Color.White.copy(alpha = 0.10f),
+    textMain = Color.White,
+    textMuted = Color(0xFFA1A1AA),
+    primary = Color(0xFFE11D48),
+    onPrimary = Color.White,
+    foregroundSubtle = Color.White.copy(alpha = 0.46f),
+    success = Color(0xFF4ADE80),
+    navigationActive = Color.Black.copy(alpha = 0.40f),
+    accentAmber = Color(0xFFF59E0B),
+    accentFuchsia = Color(0xFFE879F9),
+    accentFuchsiaSurface = Color(0xFFD946EF),
+)
+
+internal val OledColors = DarkColors.copy(
+    background = Color.Black,
+    playerBackdrop = Color.Black,
+    card = Color(0xFF191919),
+    glass = Color(0xFF191919).copy(alpha = 0.4f),
+    glassOpaque = Color(0xFF191919),
+    glassElevated = Color(0xFF2D2D2D).copy(alpha = 0.40f),
+    buttonSecondary = Color(0xFF2D2D2D),
+    textFieldClear = Color(0xFF2D2D2D),
+)
+
+val LocalPodcastyColors = staticCompositionLocalOf { LightColors }
+
+@Composable
+fun PodcastyTheme(
+    themeMode: ThemeMode,
+    content: @Composable () -> Unit,
+) {
+    val darkTheme = when (themeMode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark, ThemeMode.Oled -> true
+    }
+    val colors = when {
+        themeMode == ThemeMode.Oled -> OledColors
+        darkTheme -> DarkColors
+        else -> LightColors
+    }
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary = colors.primary,
+            onPrimary = colors.onPrimary,
+            background = colors.background,
+            surface = colors.glass,
+            onBackground = colors.textMain,
+            onSurface = colors.textMain,
+        )
+    } else {
+        lightColorScheme(
+            primary = colors.primary,
+            onPrimary = colors.onPrimary,
+            background = colors.background,
+            surface = colors.glass,
+            onBackground = colors.textMain,
+            onSurface = colors.textMain,
+        )
+    }
+
+    CompositionLocalProvider(
+        LocalPodcastyColors provides colors,
+        LocalContentColor provides colors.textMain,
+    ) {
+        MaterialTheme(colorScheme = colorScheme, content = content)
+    }
+}

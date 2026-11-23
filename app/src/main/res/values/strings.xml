@@ -1,0 +1,562 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Podcasty</string>
+
+    <!-- Bottom navigation destinations -->
+    <string name="destination_home">Home</string>
+    <string name="destination_folder">Folders</string>
+    <string name="destination_insight">Insight</string>
+    <string name="destination_library">Library</string>
+    <string name="destination_settings">Settings</string>
+
+    <!-- Home -->
+    <string name="home_greeting_morning">Good morning</string>
+    <string name="home_greeting_afternoon">Good afternoon</string>
+    <string name="home_greeting_evening">Good evening</string>
+    <string name="home_greeting_night">Good night</string>
+    <string name="home_continue_listening">Continue listening</string>
+    <string name="home_podcasts">Podcasts</string>
+    <string name="home_podcasts_empty_title">No podcasts yet</string>
+    <string name="home_podcasts_empty_description">Import a YouTube link or RSS feed to listen to podcasts here.</string>
+    <string name="home_podcasts_add_action">Add podcast</string>
+    <string name="home_recently_played">Recently Played</string>
+    <string name="home_recently_added">Recently Added</string>
+    <string name="home_popular_favourites">Popular Favourites</string>
+    <string name="home_recommended_podcasts">Recommended podcasts</string>
+    <string name="home_popular_shows">Popular shows</string>
+    <string name="home_empty_title">No music or podcasts yet</string>
+    <string name="home_empty_description">Select your default music folder to show all your local songs and music files, or add a podcast from Library.</string>
+
+    <!-- Library menu -->
+    <string name="library_search">Search</string>
+    <string name="library_podcasts">Podcasts</string>
+    <string name="library_albums">Albums</string>
+    <string name="library_episodes">Episodes</string>
+    <string name="library_hosts">Hosts</string>
+    <string name="library_categories">Categories</string>
+    <string name="library_collections">Collections</string>
+    <string name="library_saved_episodes">Saved episodes</string>
+    <string name="library_downloads">Downloads</string>
+    <string name="library_history">Listening history</string>
+    <string name="library_recently_added">Recently Added</string>
+
+    <!-- Search -->
+    <string name="search_placeholder">Search podcasts and episodes</string>
+    <string name="search_empty_title">Search your podcast library</string>
+    <string name="search_empty_description">Find episodes, podcasts, hosts, categories, or collections.</string>
+    <string name="search_no_results_title">No results found</string>
+    <string name="search_no_results_description">Try a different search term.</string>
+    <string name="search_recent_title">Recent searches</string>
+    <string name="search_recent_clear">Clear</string>
+    <string name="filter_placeholder_search">Search…</string>
+    <string name="filter_no_match_description">Try a different filter.</string>
+    <string name="text_field_clear">Clear text</string>
+
+    <!-- Episodes -->
+    <string name="episodes_empty_title">No episodes in library</string>
+    <string name="episodes_empty_description">Subscribed show episodes will appear here.</string>
+    <string name="episodes_no_match_title">No matching episodes</string>
+    <string name="episode_row_more_options">Episode options</string>
+    <string name="episode_status_played">Played</string>
+    <string name="episode_status_in_progress">%1$s left</string>
+    <string name="episode_status_new">New</string>
+
+    <!-- Podcasts -->
+    <string name="podcasts_empty_title">No podcasts in library</string>
+    <string name="podcasts_empty_description">Imported YouTube and RSS podcasts will appear here.</string>
+    <string name="podcasts_no_match_title">No matching podcasts</string>
+    <string name="podcasts_episodes_section">Episodes</string>
+
+    <!-- Albums -->
+    <string name="albums_empty_title">No albums in library</string>
+    <string name="albums_empty_description">Your local music albums will appear here after scanning your music folder.</string>
+    <string name="albums_no_match_title">No matching albums</string>
+    <string name="album_details_title">Album</string>
+    <string name="album_details_empty_title">Album unavailable</string>
+    <string name="album_details_empty_description">This album could not be found in your music library.</string>
+    <plurals name="album_details_track_count">
+        <item quantity="one">%d track</item>
+        <item quantity="other">%d tracks</item>
+    </plurals>
+    <string name="podcast_row_open">Open podcast</string>
+    <string name="podcast_row_more_options">Podcast options</string>
+    <string name="podcast_details_title">Podcast</string>
+    <string name="podcast_details_empty_title">Podcast unavailable</string>
+    <string name="podcast_details_empty_description">This podcast could not be found in your library.</string>
+    <string name="podcast_subscribe">Subscribe</string>
+    <string name="podcast_subscribed">Subscribed</string>
+    <string name="podcast_unsubscribe">Unsubscribe</string>
+    <string name="podcast_display_options">Podcast display options</string>
+    <string name="podcast_display_layout">View</string>
+    <string name="podcast_display_list">List</string>
+    <string name="podcast_display_grid">Grid</string>
+    <string name="podcast_details_metadata">%1$s · %2$s</string>
+    <plurals name="podcast_details_episode_count">
+        <item quantity="one">%d episode</item>
+        <item quantity="other">%d episodes</item>
+    </plurals>
+
+    <!-- Hosts -->
+    <string name="hosts_empty_title">No hosts in library</string>
+    <string name="hosts_empty_description">Podcast hosts will appear here.</string>
+    <string name="hosts_no_match_title">No matching hosts</string>
+    <string name="host_row_open">Open host</string>
+    <string name="host_row_more_options">Host options</string>
+    <string name="host_details_title">Host</string>
+    <string name="host_details_empty_title">Host unavailable</string>
+    <string name="host_details_empty_description">This host could not be found in your library.</string>
+    <string name="host_details_summary">%1$s · %2$s</string>
+    <plurals name="host_details_podcast_count">
+        <item quantity="one">%d podcast</item>
+        <item quantity="other">%d podcasts</item>
+    </plurals>
+
+    <!-- Categories -->
+    <string name="categories_empty_title">No categories in library</string>
+    <string name="categories_empty_description">Podcast categories will appear here.</string>
+    <string name="categories_no_match_title">No matching categories</string>
+    <string name="category_row_open">Open category</string>
+    <string name="category_row_more_options">Category options</string>
+    <string name="category_details_title">Category</string>
+    <string name="category_details_empty_title">Category unavailable</string>
+    <string name="category_details_empty_description">This category could not be found.</string>
+    <string name="category_details_summary">%1$s · %2$s</string>
+
+    <!-- Collections -->
+    <string name="collections_empty_title">No collections yet</string>
+    <string name="collections_empty_description">Create a collection to organize your favorite episodes.</string>
+    <string name="collection_row_open">Open collection</string>
+    <string name="collection_create">Create collection</string>
+    <string name="collection_create_title">Create collection</string>
+    <string name="collection_edit">Edit collection</string>
+    <string name="collection_edit_title">Edit collection</string>
+    <string name="collection_delete">Delete collection</string>
+    <string name="collection_delete_confirm_title">Delete collection?</string>
+    <string name="collection_delete_confirm_description">This removes the collection from your library. Episodes remain available in your shows.</string>
+    <string name="collection_name">Collection name</string>
+    <string name="collection_details_title">Collection</string>
+    <string name="collection_details_empty_title">Collection unavailable</string>
+    <string name="collection_details_empty_description">This collection is no longer in your library.</string>
+    <string name="collection_reorder">Reorder episodes</string>
+    <string name="collection_reorder_done">Done reordering</string>
+    <string name="collection_reorder_drag_handle">Drag to reorder episode</string>
+    <string name="collection_recently_played">Recently played</string>
+
+    <!-- Saved episodes, Downloads, History -->
+    <string name="saved_episodes_empty_title">No saved episodes</string>
+    <string name="saved_episodes_empty_description">Star episodes you want to revisit and they will appear here.</string>
+    <string name="downloads_empty_title">No local audio files</string>
+    <string name="downloads_empty_description">Select your default music folder in Settings → Music library to index your local songs and audio files.</string>
+    <string name="downloads_info_helper">Local songs and music files from your default music folder appear here for instant offline playback.</string>
+    <string name="downloads_cached_badge">Downloaded</string>
+    <string name="downloads_remove">Remove download</string>
+    <string name="downloads_save">Download locally</string>
+    <string name="downloads_clear_all">Clear downloads</string>
+    <string name="history_empty_title">No listening history yet</string>
+    <string name="history_empty_description">Episodes you listen to will be recorded here automatically.</string>
+    <string name="history_clear">Clear history</string>
+    <string name="history_clear_confirm_title">Clear listening history?</string>
+    <string name="history_clear_confirm_description">This clears your recorded playback sessions from this device.</string>
+
+    <!-- Sorting -->
+    <string name="sort_by">Sort by</string>
+    <string name="alphabetical_index">Alphabetical index</string>
+    <string name="sort_name">Title</string>
+    <string name="sort_podcast">Podcast</string>
+    <string name="sort_host">Host</string>
+    <string name="sort_artist">Artist</string>
+    <string name="sort_track_count">Tracks</string>
+    <string name="sort_duration">Duration</string>
+    <string name="sort_date_added">Date published</string>
+    <string name="sort_play_count">Plays</string>
+    <string name="sort_order_asc">Ascending</string>
+    <string name="sort_order_desc">Descending</string>
+
+    <!-- Context Menus & Episode Info -->
+    <string name="episode_context_play_next">Play next</string>
+    <string name="episode_context_add_to_queue">Add to queue</string>
+    <string name="episode_context_remove_from_queue">Remove from queue</string>
+    <string name="episode_context_episode_info">Episode details</string>
+    <string name="episode_context_save_episode">Save episode</string>
+    <string name="episode_context_unsave_episode">Remove from saved</string>
+    <string name="episode_context_add_to_collection">Add to collection</string>
+    <string name="episode_context_remove_from_collection">Remove from collection</string>
+    <string name="episode_context_go_to_podcast">Go to podcast</string>
+    <string name="episode_context_go_to_host">Go to %1$s</string>
+    <string name="episode_context_collection_picker_title">Add to collection</string>
+    <string name="episode_context_no_collections">Create a collection to add this episode.</string>
+    <string name="episode_context_edit_tags">Edit tags</string>
+    <string name="episode_context_bulk_edit_tags">Bulk edit tags</string>
+    <string name="episode_context_import_transcript">Import transcript</string>
+    <string name="episode_info_title">Episode details</string>
+    <string name="episode_info_summary">SHOW NOTES</string>
+    <string name="episode_info_details">DETAILS</string>
+    <string name="episode_info_podcast">Podcast</string>
+    <string name="episode_info_host">Host</string>
+    <string name="episode_info_category">Category</string>
+    <string name="episode_info_published">Published</string>
+    <string name="episode_info_duration">Duration</string>
+    <string name="episode_info_episode_number">Episode</string>
+    <string name="episode_info_status">Status</string>
+    <string name="episode_info_plays">Plays</string>
+    <string name="episode_info_audio">Audio</string>
+    <string name="episode_info_file_size">Local size</string>
+
+    <!-- Player -->
+    <string name="playback_notification_channel">Podcast playback</string>
+    <string name="full_screen_player">Full screen podcast player</string>
+    <string name="player_previous">Previous episode</string>
+    <string name="player_play">Play</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_next">Next episode</string>
+    <string name="player_rewind">Rewind %1$d seconds</string>
+    <string name="player_forward">Forward %1$d seconds</string>
+    <string name="player_seek">Playback position</string>
+    <string name="player_volume">Media volume</string>
+    <string name="player_save">Save episode</string>
+    <string name="player_more">More options</string>
+    <string name="player_shuffle">Shuffle</string>
+    <string name="player_shuffle_on">Shuffle on</string>
+    <string name="player_repeat">Repeat</string>
+    <string name="player_repeat_off">Repeat off</string>
+    <string name="player_repeat_all">Repeat queue</string>
+    <string name="player_repeat_one">Repeat episode</string>
+    <string name="player_transcript">Transcript</string>
+    <string name="player_transcript_not_available">Transcript is not available for this episode.</string>
+    <string name="player_speed">Playback speed</string>
+    <string name="player_speed_title">Playback speed</string>
+    <string name="player_sleep_timer">Sleep timer</string>
+    <string name="player_sleep_timer_title">Sleep timer</string>
+    <string name="player_sleep_timer_off">Off</string>
+    <string name="player_sleep_timer_minutes">%1$d minutes</string>
+    <string name="player_sleep_timer_end_of_episode">End of episode</string>
+    <string name="player_sleep_timer_remaining">Stops in %1$s</string>
+    <string name="player_cast">Audio output</string>
+    <string name="player_queue">Queue</string>
+    <string name="player_queue_drag_handle">Reorder episode</string>
+    <string name="player_queue_current">Currently playing</string>
+    <string name="player_queue_unknown_episode">Unavailable episode</string>
+    <string name="player_queue_empty">Your playback queue is empty.</string>
+
+    <!-- Insight -->
+    <string name="insight_library_section">Library</string>
+    <string name="insight_listening_section">History</string>
+    <string name="insight_range_7d">7D</string>
+    <string name="insight_range_30d">30D</string>
+    <string name="insight_range_all">All</string>
+    <string name="insight_library_size">Offline audio</string>
+    <string name="insight_total_episodes">Episodes</string>
+    <string name="insight_total_podcasts">Podcasts</string>
+    <string name="insight_total_hosts">Hosts</string>
+    <string name="insight_total_collections">Collections</string>
+    <string name="insight_library_growth">Library growth</string>
+    <string name="insight_episode_status">Episode progress</string>
+    <string name="insight_total_time">Total listening time</string>
+    <string name="insight_streak">Streak</string>
+    <string name="insight_average_session">Average session</string>
+    <string name="insight_category_distribution">Category distribution</string>
+    <string name="insight_playback_outcomes">Playback outcomes</string>
+    <string name="insight_top_hosts">Top hosts</string>
+    <string name="insight_top_episodes">Most played episodes</string>
+    <string name="insight_completed">Completed</string>
+    <string name="insight_in_progress">In progress</string>
+    <string name="insight_unplayed">Unplayed</string>
+    <string name="insight_skipped">Skipped</string>
+    <string name="insight_stopped">Paused</string>
+    <string name="insight_other">Other</string>
+    <string name="insight_no_library_data">No episodes in your library yet.</string>
+    <string name="insight_no_listening_data">No listening data for this period yet.</string>
+    <string name="insight_no_categories">No category listening data yet.</string>
+    <string name="insight_no_outcomes">No playback sessions recorded yet.</string>
+    <string name="insight_no_top_hosts">No host listens yet.</string>
+    <string name="insight_no_top_episodes">No played episodes yet.</string>
+    <string name="insight_show_more">Show more</string>
+    <string name="insight_show_less">Show less</string>
+    <string name="insight_days_value">%1$d days</string>
+    <string name="insight_plays_value">%1$d plays</string>
+    <string name="insight_attempts_value">%1$d sessions</string>
+    <string name="insight_percent_value">%1$d%%</string>
+    <string name="insight_change_value">%1$+.0f%% from previous period</string>
+    <string name="insight_duration_days_hours">%1$d d %2$d hr</string>
+    <string name="insight_duration_hours_minutes">%1$d hr %2$d min</string>
+    <string name="insight_duration_minutes">%1$d min</string>
+    <string name="insight_duration_seconds">%1$d s</string>
+    <string name="insight_library_growth_description">Cumulative library growth chart</string>
+    <string name="insight_episode_status_description">Episode progress breakdown chart</string>
+    <string name="insight_activity_description">Listening activity chart</string>
+    <string name="insight_category_description">Listening time by category chart</string>
+    <string name="insight_outcomes_description">Playback outcomes chart</string>
+
+    <!-- Settings -->
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_music_library">Music library</string>
+    <string name="settings_lyrics_captions">Lyrics &amp; captions</string>
+    <string name="settings_playback">Playback</string>
+    <string name="settings_bluetooth">Bluetooth</string>
+    <string name="settings_downloads">Downloads &amp; storage</string>
+    <string name="settings_about">About</string>
+
+    <!-- Music Library & Storage Settings -->
+    <string name="music_library_default_folder">Default music folder</string>
+    <string name="music_library_select_folder">Select folder</string>
+    <string name="music_library_add_usb_folder">Select USB OTG folder</string>
+    <string name="music_library_scan_folder">Scan music folder</string>
+    <string name="music_library_scanning">Scanning music folder…</string>
+    <string name="music_library_scan_mediastore">Scan device MediaStore</string>
+    <string name="music_library_auto_refresh">Automatic library refresh</string>
+    <string name="music_library_include_subfolders">Include subfolders</string>
+    <string name="music_library_supported_formats">Supported file types</string>
+    <string name="music_library_connected_folders">Connected folders</string>
+    <string name="music_folder_none_selected">Not set</string>
+    <string name="music_library_saf_helper">Uses Android Storage Access Framework (SAF) for internal storage, SD cards, and USB OTG drives without requesting all-files access. Playlists and favorites stay preserved across rescans.</string>
+    <string name="supported_formats_decoder_summary">Active audio decoders</string>
+    <string name="storage_browse_internal_sd">Select internal or SD card folder</string>
+    <string name="storage_browse_usb_otg">Browse USB OTG storage</string>
+    <string name="storage_refresh_library">Refresh library now</string>
+    <string name="storage_detected_volumes">Detected storage volumes</string>
+    <string name="remove_label">Remove</string>
+
+    <!-- Lyrics, Captions, Lock Screen & AOD Settings -->
+    <string name="caption_notification_channel">Live transcript captions</string>
+    <string name="caption_notification_channel_desc">Optional silent notification showing the current transcript sentence during playback.</string>
+    <string name="lockscreen_lyrics_channel">Synchronized lock-screen lyrics</string>
+    <string name="lockscreen_lyrics_channel_desc">Silent companion notification showing real-time synchronized song lyrics alongside media controls on the lock screen.</string>
+    <string name="lyrics_auto_sync">Automatic lyrics synchronization</string>
+    <string name="lyrics_auto_scroll">Auto-scroll transcript</string>
+    <string name="lyrics_transcript_language">Transcript language</string>
+    <string name="lyrics_caption_font_size">Caption font size</string>
+    <string name="lyrics_show_lock_screen_lyrics">Lock screen synchronized lyrics</string>
+    <string name="lyrics_show_lock_screen_captions">Show podcast captions on lock screen</string>
+    <string name="lyrics_show_transcript_notification">Show transcript notification</string>
+    <string name="lyrics_lock_screen_aod_helper">When enabled, Podcasty updates a silent companion notification alongside media controls with the synchronized lyric line and upcoming line. Lock-screen visibility always respects your Android privacy settings.</string>
+
+    <!-- Sleep Timer & Playback Additions -->
+    <string name="sleep_timer_custom_duration">Custom duration (minutes)</string>
+    <string name="sleep_timer_set_minutes">Set timer</string>
+    <string name="sleep_timer_after_tracks">Stop after selected number of tracks</string>
+    <string name="sleep_timer_set_tracks">Set tracks</string>
+    <string name="sleep_timer_fade_out_title">Gradual fade-out duration</string>
+    <string name="playback_resume_previous">Resume previous playback</string>
+    <string name="playback_gapless">Gapless playback</string>
+
+    <!-- Bluetooth Settings -->
+    <string name="bluetooth_pause_on_disconnect">Pause when headphones disconnect</string>
+    <string name="bluetooth_media_controls">Bluetooth media controls</string>
+    <string name="bluetooth_auto_resume">Resume automatically on reconnect</string>
+    <string name="bluetooth_helper">Pauses playback when Bluetooth or wired headphones disconnect (ACTION_AUDIO_BECOMING_NOISY) and integrates headset and car controls via Android MediaSession.</string>
+
+    <!-- YouTube & RSS Import -->
+    <string name="import_podcast_sheet_title">Add YouTube or RSS podcast</string>
+    <string name="youtube_import_section_title">YouTube podcast link</string>
+    <string name="youtube_optional_rss_audio_placeholder">Optional linked RSS/MP3 audio URL (overrides YouTube stream)</string>
+    <string name="youtube_import_save_action">Add &amp; Play YouTube audio</string>
+    <string name="youtube_compliance_note">Podcasty streams YouTube audio in its own player for personal playback. If YouTube blocks extraction, open the video in the official YouTube app, link an authorized RSS/MP3 audio source, or import SRT/VTT/LRC transcripts.</string>
+    <string name="rss_import_section_title">RSS podcast feed</string>
+    <string name="rss_import_action">Import RSS feed</string>
+    <string name="importing_progress">Importing…</string>
+    <string name="youtube_transcript_unavailable">Transcript unavailable. Import a transcript or open the linked podcast audio source.</string>
+    <string name="transcript_import_action">Import transcript (.srt / .vtt / .lrc)</string>
+    <string name="youtube_open_official">Open in YouTube</string>
+    <string name="youtube_link_audio_source">Link RSS/MP3 audio source</string>
+    <string name="youtube_link_audio_helper">Link a creator-provided RSS/MP3 audio URL to enable native background playback and synchronized captions in the lyrics view.</string>
+
+    <!-- Tag Editor & Raw PCM -->
+    <string name="tag_editor_title">Edit tags</string>
+    <string name="tag_editor_bulk_title">Bulk edit %1$d files</string>
+    <string name="tag_editor_bulk_helper">Only non-empty fields will be updated across all selected local audio files. Original files are backed up and verified before saving.</string>
+    <string name="tag_editor_basic_section">BASIC METADATA</string>
+    <string name="tag_editor_advanced_section">ADVANCED METADATA</string>
+    <string name="tag_editor_replace_artwork">Replace artwork</string>
+    <string name="tag_editor_remove_artwork">Remove artwork</string>
+    <string name="tag_editor_saving">Saving…</string>
+    <string name="tag_field_title">Title</string>
+    <string name="tag_field_artist">Artist</string>
+    <string name="tag_field_album">Album</string>
+    <string name="tag_field_album_artist">Album artist</string>
+    <string name="tag_field_genre">Genre</string>
+    <string name="tag_field_year">Year</string>
+    <string name="tag_field_track">Track #</string>
+    <string name="tag_field_disc">Disc #</string>
+    <string name="tag_field_composer">Composer</string>
+    <string name="tag_field_comment">Comment</string>
+    <string name="tag_field_lyrics">Lyrics / transcript</string>
+    <string name="tag_field_copyright">Copyright</string>
+    <string name="tag_field_publisher">Publisher</string>
+    <string name="tag_field_bpm">BPM</string>
+    <string name="tag_field_encoder">Encoder</string>
+    <string name="tag_field_custom_key">Custom tag key</string>
+    <string name="tag_field_custom_value">Custom tag value</string>
+    <string name="raw_pcm_config_title">Raw PCM format parameters</string>
+    <string name="raw_pcm_config_helper">Raw PCM file "%1$s" has no format header. Select its audio parameters to stream playback.</string>
+    <string name="raw_pcm_sample_rate">SAMPLE RATE</string>
+    <string name="raw_pcm_bit_depth">BIT DEPTH</string>
+    <string name="raw_pcm_channels">CHANNELS</string>
+    <string name="raw_pcm_big_endian">Big-endian byte order</string>
+    <string name="appearance_title">Appearance</string>
+    <string name="appearance_theme_title">Theme</string>
+    <string name="appearance_reduce_transparency">Reduce transparency</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_oled">OLED</string>
+    <string name="playback_settings_title">Playback</string>
+    <string name="playback_default_speed">Default playback speed</string>
+    <string name="playback_skip_backward">Skip backward</string>
+    <string name="playback_skip_forward">Skip forward</string>
+    <string name="playback_seconds_value">%1$d s</string>
+    <string name="playback_show_speed_badge">Show playback speed badge</string>
+    <string name="playback_keep_screen_on_transcript">Keep screen on while reading transcript</string>
+    <string name="playback_fullscreen_background">Fullscreen background</string>
+    <string name="playback_background_solid">Solid</string>
+    <string name="playback_background_living">Living artwork</string>
+    <string name="playback_background_helper">%1$s uses more GPU resources. For less powerful devices, %2$s is recommended.</string>
+    <string name="downloads_settings_title">Downloads &amp; storage</string>
+    <string name="downloads_auto_cache">Auto-download saved episodes</string>
+    <string name="downloads_storage_used">Local audio stored</string>
+    <string name="downloads_reset_demo_cache">Restore demonstration downloads</string>
+    <string name="about_title">About</string>
+    <string name="about_description">A calm, tactile Android podcast player</string>
+    <string name="about_version">Version</string>
+    <string name="about_license">License</string>
+    <string name="about_license_value">GNU GPL v3.0</string>
+    <string name="about_attribution_label">Visual &amp; UI Reference</string>
+    <string name="about_attribution_body">UI design, liquid-glass navigation chrome, adaptive player layouts, and living artwork shader adapted from Airmedy (github.com/misa198/airmedy) under GNU GPL v3.0. Software audio decoding uses Jellyfin Media3 FFmpeg (GPL-3.0); tag editing uses TagLib (LGPL-2.1/MPL-1.1).</string>
+
+    <!-- Common -->
+    <string name="navigate_back">Go back</string>
+    <string name="bottom_sheet_dismiss">Dismiss sheet</string>
+    <string name="bottom_sheet_back">Back</string>
+    <string name="create">Create</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="ok">OK</string>
+    <string name="duration_day">%1$d d</string>
+    <string name="duration_hour">%1$d hr</string>
+    <string name="duration_minute">%1$d min</string>
+    <string name="duration_second">%1$d s</string>
+
+    <!-- Online Podcast Streaming in Lyrics Page -->
+    <string name="lyrics_stream_url_placeholder">Paste YouTube, RSS, or audio URL</string>
+    <string name="lyrics_stream_go_action">Play stream</string>
+    <string name="lyrics_stream_resolving">Resolving online podcast source…</string>
+    <string name="lyrics_stream_return_local">Local lyrics</string>
+    <string name="lyrics_stream_oauth_action">YouTube OAuth</string>
+    <string name="lyrics_stream_oauth_signed_in">OAuth active</string>
+    <string name="lyrics_stream_oauth_title">YouTube Data API v3 OAuth 2.0</string>
+    <string name="lyrics_stream_oauth_helper">Authorize with your own Google OAuth Android Client ID (PKCE) to retrieve transcripts for videos you own or can edit via captions.list and captions.download. No credentials are hardcoded; tokens are encrypted in Android KeyStore.</string>
+    <string name="lyrics_stream_oauth_client_id_placeholder">Google OAuth Android Client ID</string>
+    <string name="lyrics_stream_oauth_sign_in">Sign in with Google OAuth</string>
+    <string name="lyrics_stream_oauth_token_placeholder">Or paste temporary OAuth access token</string>
+    <string name="lyrics_stream_oauth_save_token">Use session token</string>
+    <string name="lyrics_stream_oauth_sign_out">Sign out</string>
+    <string name="lyrics_stream_load_transcript_url">Load VTT/SRT URL</string>
+    <string name="lyrics_stream_rss_episodes">RSS episodes</string>
+    <!-- Add Podcast Page & Real-Time AI Captions -->
+    <string name="library_add_podcast">Add Podcast</string>
+    <string name="add_podcast_input_heading">Import from URL</string>
+    <string name="add_podcast_url_placeholder">Paste YouTube, RSS/Atom feed, or audio URL</string>
+    <string name="add_podcast_detected_youtube">Detected: YouTube video</string>
+    <string name="add_podcast_detected_rss">Detected: RSS / Atom podcast feed</string>
+    <string name="add_podcast_detected_direct_audio">Detected: Direct podcast audio stream</string>
+    <string name="add_podcast_caption_language_label">Live AI caption language</string>
+    <string name="add_podcast_inspect_action">Fetch Metadata</string>
+    <string name="add_podcast_inspecting">Fetching…</string>
+    <string name="add_podcast_input_helper">Paste any YouTube video/Shorts URL, RSS 2.0 / Atom feed URL, or direct podcast audio stream. RSS &amp; audio streams play directly in Podcasty\'s native player with real-time AI captions without downloading audio files.</string>
+    <string name="add_podcast_badge_rss">RSS Podcast · %1$d episodes</string>
+    <string name="add_podcast_badge_direct_audio">Direct Podcast Audio Stream</string>
+    <string name="add_podcast_add_to_library">Add to Library</string>
+    <string name="add_podcast_play_latest">Play Latest</string>
+    <string name="add_podcast_play_now">Play Now</string>
+    <string name="add_podcast_open_in_library">Open in Library</string>
+    <string name="add_podcast_episodes_heading">Episodes (%1$d)</string>
+    <string name="add_podcast_add_and_play">Add &amp; Play</string>
+    <string name="add_podcast_youtube_audio_notice">Plays audio-only in Podcasty\'s native player. Video is not shown. If YouTube blocks extraction, Podcasty offers to open the original video in YouTube.</string>
+    <string name="add_podcast_youtube_fallback_notice">Podcasty could not resolve an audio stream for this video. Open it in the official YouTube app to watch or listen there.</string>
+    <string name="add_podcast_youtube_linked_audio_placeholder">Optional: Authorized podcast audio URL (MP3/M4A) to play &amp; sync</string>
+    <string name="add_podcast_live_captions_card_title">Real-Time AI Podcast Captions</string>
+    <string name="add_podcast_live_captions_card_subtitle">Automatic speech recognition (Tamil, Sinhala, English &amp; all languages) while streaming podcasts.</string>
+    <string name="add_podcast_configure_asr">Configure</string>
+    <string name="add_podcast_imported_heading">Imported Podcasts &amp; References</string>
+
+    <string name="live_captions_retry">Retry</string>
+    <string name="live_captions_configure_settings">Caption Settings</string>
+    <string name="asr_settings_section">Real-Time AI Podcast Captions</string>
+    <string name="asr_auto_start">Auto-generate captions for podcasts</string>
+    <string name="asr_save_history">Save AI caption history</string>
+    <string name="asr_engine_label">Speech recognition engine</string>
+    <string name="asr_language_label">Recognition language</string>
+    <string name="asr_backend_url_placeholder">wss://your-speech-backend.example.com/ws/captions</string>
+    <string name="asr_auth_token_placeholder">Backend Bearer Token (encrypted in KeyStore)</string>
+    <string name="asr_youtube_api_key_placeholder">Optional YouTube Data API v3 Key (encrypted)</string>
+    <string name="asr_save_connection">Save Connection Settings</string>
+    <string name="asr_saved_confirmation">Saved encrypted connection settings.</string>
+    <string name="asr_settings_helper">Google Cloud Speech-to-Text connects over Secure WebSocket (wss://) to your Podcasty Node.js backend so Google service-account credentials never touch the Android app. Sherpa-ONNX and Whisper.cpp run offline once their native model weights are installed.</string>
+
+    <!-- Offline Music File Manager & Multi-Queue -->
+    <string name="file_action_add_to_specific_queue">Add to specific queue…</string>
+    <string name="file_action_details">File details</string>
+    <string name="file_action_rename">Rename file</string>
+    <string name="file_action_move">Move file</string>
+    <string name="file_action_copy">Copy file</string>
+    <string name="file_action_delete">Delete file</string>
+    <string name="file_action_share">Share file</string>
+    <string name="file_action_view_lyrics">View embedded lyrics</string>
+    <string name="file_action_open_folder">Open containing folder</string>
+    <string name="queues_manage_title">Playback queues</string>
+    <string name="queues_create">Create queue</string>
+    <string name="folder_view_linear">Linear</string>
+    <string name="folder_view_hierarchical">Hierarchical</string>
+    <string name="folder_exclude">Exclude folder</string>
+    <string name="folder_excluded_manage">Excluded folders</string>
+    <!-- Equalizer & Audio Quality -->
+    <string name="player_equalizer_audio">Equalizer &amp; audio</string>
+    <string name="eq_master_enable">Enable equalizer</string>
+    <string name="eq_waiting_for_session">Start playback to attach audio session</string>
+    <string name="eq_bypassed_status">Disabled · Original audio bypassed</string>
+    <string name="eq_presets_title">Presets</string>
+    <string name="eq_builtin_badge">Built-in</string>
+    <string name="eq_custom_badge">Custom</string>
+    <string name="eq_save_preset">Save preset</string>
+    <string name="eq_update_preset">Update</string>
+    <string name="eq_rename_preset">Rename</string>
+    <string name="eq_delete_preset">Delete</string>
+    <string name="eq_reset">Reset EQ</string>
+    <string name="eq_restore_defaults">Restore defaults</string>
+    <string name="eq_bands_title">Frequency bands</string>
+    <string name="eq_tap_db_to_reset_hint">Tap any dB value to reset that band to 0.0 dB.</string>
+    <string name="eq_unavailable_body">This Android device does not expose a hardware AudioEffect Equalizer for this session.</string>
+    <string name="eq_preamp_title">Preamp</string>
+    <string name="eq_clipping_protection">Clipping protection</string>
+    <string name="eq_headroom_active">Auto headroom: %1$s to prevent digital clipping</string>
+    <string name="eq_headroom_neutral">Neutral headroom (0.0 dB)</string>
+    <string name="eq_effects_title">Audio controls</string>
+    <string name="eq_bass_boost">Bass boost</string>
+    <string name="eq_virtualizer">Virtualizer</string>
+    <string name="eq_channel_balance">Left / Right balance</string>
+    <string name="eq_balance_center">Center</string>
+    <string name="eq_mono_audio">Mono audio</string>
+    <string name="eq_mono_audio_subtitle">Combine left and right channels equally</string>
+    <string name="eq_save_preset_dialog_title">Save custom preset</string>
+    <string name="eq_save_preset_dialog_desc">Save the current equalizer curve, preamp, and audio settings.</string>
+    <string name="eq_rename_preset_desc">Choose a new name for this custom preset.</string>
+    <string name="eq_preset_name_placeholder">Preset name (e.g. Studio Headphones)</string>
+    <string name="eq_delete_preset_confirm">Delete custom preset \"%1$s\"?</string>
+    <string name="eq_restore_defaults_confirm">Delete all saved custom presets and reset equalizer to Flat?</string>
+    <string name="sleep_timer_clock_time">Stop at clock time (24-hour)</string>
+    <string name="sleep_timer_set_clock_time">Set time</string>
+    <string name="playback_audio_fade">Audio fade duration</string>
+    <string name="playback_remove_played_queue">Remove completed tracks from queue</string>
+    <string name="home_optional_section">Additional Home music section</string>
+    <string name="home_favorites">Favorites</string>
+    <string name="home_most_played">Most Played</string>
+    <string name="home_never_played">Never Played</string>
+    <string name="home_longest_tracks">Longest Tracks</string>
+    <string name="playback_shake_to_skip">Shake to skip</string>
+    <string name="playback_replaygain">ReplayGain normalization (tagged music)</string>
+    <string name="playlist_backup_export">Export / back up playlists</string>
+    <string name="playlist_backup_restore">Restore playlists</string>
+    <string name="playback_customize_controls">Customize player quick actions</string>
+    <string name="music_find_duplicates">Find duplicate music files</string>
+    <string name="playback_crossfade">Crossfade tracks</string>
+</resources>
