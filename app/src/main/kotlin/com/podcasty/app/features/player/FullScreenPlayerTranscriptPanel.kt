@@ -116,8 +116,11 @@ internal fun syncedTranscriptBlurRadius(distance: Int) = when (distance) {
 private data class DisplayCaptionRow(
     val key: String,
     val cue: TranscriptCue,
+    val translation: String? = cue.translation,
     val isPartial: Boolean = false,
 )
+
+private val QuickLyricsFontScales = listOf(0.85f, 1.0f, 1.15f, 1.30f)
 
 @Composable
 internal fun FullScreenPlayerTranscriptPanel(
@@ -129,11 +132,15 @@ internal fun FullScreenPlayerTranscriptPanel(
     seekRequestId: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    playbackSpeed: Float = 1.0f,
     useLargeText: Boolean = false,
     textScale: Float = 1f,
     captionFontScale: Float = 1f,
     autoSyncEnabled: Boolean = true,
     autoScrollEnabled: Boolean = true,
+    showTranslation: Boolean = true,
+    onToggleTranslation: ((Boolean) -> Unit)? = null,
+    onFontScaleChange: ((Float) -> Unit)? = null,
     activeDocument: TranscriptDocument? = null,
     availableDocuments: List<TranscriptDocument> = emptyList(),
     isYouTubeReference: Boolean = false,
@@ -163,7 +170,25 @@ internal fun FullScreenPlayerTranscriptPanel(
         }
     }
 
-    val displayRows: List<DisplayCaptionRow> = remember(isLivePodcastMode, liveCaptionState.finalizedSegments, liveCaptionState.activePartial, staticCues) {
+    val secondaryDoc = remember(activeDocument, availableDocuments) {
+        if (activeDocument == null || availableDocuments.size < 2) null
+        else availableDocuments.firstOrNull {
+            !it.language.equals(activeDocument.language, ignoreCase = true) && it.cues.isNotEmpty()
+        }
+    }
+
+    val hasAnyTranslation = remember(staticCues, secondaryDoc) {
+        staticCues.any { !it.translation.isNullOrBlank() } || secondaryDoc != null
+    }
+
+    val displayRows: List<DisplayCaptionRow> = remember(
+        isLivePodcastMode,
+        liveCaptionState.finalizedSegments,
+        liveCaptionState.activePartial,
+        staticCues,
+        secondaryDoc,
+        showTranslation,
+    ) {
         if (isLivePodcastMode && staticCues.isEmpty()) {
             liveCaptionState.allDisplaySegments.mapIndexed { idx, seg ->
                 DisplayCaptionRow(
@@ -179,10 +204,28 @@ internal fun FullScreenPlayerTranscriptPanel(
                 )
             }
         } else {
+            val secTimedCues = secondaryDoc?.cues?.filter { it.startMs >= 0L }?.sortedBy { it.startMs }.orEmpty()
             staticCues.mapIndexed { idx, cue ->
+                val pairedTranslation = when {
+                    !showTranslation -> null
+                    !cue.translation.isNullOrBlank() -> cue.translation
+                    secTimedCues.isNotEmpty() && cue.startMs >= 0L -> {
+                        val matchIdx = CaptionSyncEngine.findActiveCueIndex(secTimedCues, cue.startMs)
+                        val candidate = secTimedCues.getOrNull(matchIdx)
+                        if (candidate != null && abs(candidate.startMs - cue.startMs) <= 1_500L &&
+                            !candidate.text.equals(cue.text, ignoreCase = true)
+                        ) {
+                            candidate.text
+                        } else {
+                            null
+                        }
+                    }
+                    else -> null
+                }
                 DisplayCaptionRow(
                     key = "${cue.id}_$idx",
                     cue = cue,
+                    translation = pairedTranslation,
                     isPartial = false,
                 )
             }
@@ -190,6 +233,8 @@ internal fun FullScreenPlayerTranscriptPanel(
     }
 
     val syncedRows = remember(displayRows) { displayRows.filter { it.cue.startMs >= 0L } }
+    var resyncTrigger by remember(episodeId) { mutableLongStateOf(0L) }
+    var isManuallyBrowsing by remember(episodeId) { mutableStateOf(false) }
 
     Column(
         modifier = modifier.padding(top = 6.dp),
@@ -229,8 +274,14 @@ internal fun FullScreenPlayerTranscriptPanel(
             }
         }
 
-        // Language selector pills when multiple static/imported transcript languages exist
-        if (!isLivePodcastMode && availableDocuments.size > 1) {
+        // Language selector, quick font-size, translation toggle, and recenter chips
+        val showToolbar = !isLivePodcastMode && displayRows.isNotEmpty() && (
+            availableDocuments.size > 1 ||
+                onFontScaleChange != null ||
+                (hasAnyTranslation && onToggleTranslation != null) ||
+                isManuallyBrowsing
+            )
+        if (showToolbar) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -239,13 +290,50 @@ internal fun FullScreenPlayerTranscriptPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                availableDocuments.forEach { doc ->
-                    val selected = doc.language.equals(activeDocument?.language, ignoreCase = true)
+                if (isManuallyBrowsing) {
                     CaptionChip(
-                        label = displayNameForTranscriptLanguage(doc.language),
-                        selected = selected,
-                        onClick = { onSelectLanguage(doc.language) },
+                        label = stringResource(R.string.lyrics_resync),
+                        selected = true,
+                        onClick = { resyncTrigger += 1L },
                     )
+                }
+                if (onFontScaleChange != null) {
+                    val currentIdx = QuickLyricsFontScales.indices.minByOrNull {
+                        abs(QuickLyricsFontScales[it] - captionFontScale)
+                    } ?: 1
+                    CaptionChip(
+                        label = "A−",
+                        selected = false,
+                        onClick = {
+                            val next = QuickLyricsFontScales[(currentIdx - 1).coerceAtLeast(0)]
+                            if (next != captionFontScale) onFontScaleChange(next)
+                        },
+                    )
+                    CaptionChip(
+                        label = "A+",
+                        selected = false,
+                        onClick = {
+                            val next = QuickLyricsFontScales[(currentIdx + 1).coerceAtMost(QuickLyricsFontScales.lastIndex)]
+                            if (next != captionFontScale) onFontScaleChange(next)
+                        },
+                    )
+                }
+                if (hasAnyTranslation && onToggleTranslation != null) {
+                    CaptionChip(
+                        label = stringResource(R.string.lyrics_translation_chip),
+                        selected = showTranslation,
+                        onClick = { onToggleTranslation(!showTranslation) },
+                    )
+                }
+                if (availableDocuments.size > 1) {
+                    availableDocuments.forEach { doc ->
+                        val selected = doc.language.equals(activeDocument?.language, ignoreCase = true)
+                        CaptionChip(
+                            label = displayNameForTranscriptLanguage(doc.language),
+                            selected = selected,
+                            onClick = { onSelectLanguage(doc.language) },
+                        )
+                    }
                 }
             }
         }
@@ -304,10 +392,13 @@ internal fun FullScreenPlayerTranscriptPanel(
                             episodeId = episodeId,
                             rows = syncedRows,
                             currentPositionMs = currentPositionMs,
+                            playbackSpeed = playbackSpeed,
                             isPlaying = isPlaying,
                             autoScrollEnabled = autoScrollEnabled,
                             pendingSeekPositionMs = pendingSeekPositionMs,
                             seekRequestId = seekRequestId,
+                            resyncTrigger = resyncTrigger,
+                            onBrowsingChanged = { isManuallyBrowsing = it },
                             canSeek = hasLinkedAudio,
                             overrideActiveIndex = if (isLivePodcastMode && staticCues.isEmpty() && liveCaptionState.activeSegmentIndex >= 0) {
                                 liveCaptionState.activeSegmentIndex.coerceIn(0, syncedRows.lastIndex)
@@ -318,7 +409,7 @@ internal fun FullScreenPlayerTranscriptPanel(
                             modifier = Modifier.fillMaxSize(),
                         )
                     } else {
-                        PlainTranscriptList(displayRows.map { it.cue }, Modifier.fillMaxSize())
+                        PlainTranscriptList(displayRows, Modifier.fillMaxSize())
                     }
                 }
             }
@@ -478,17 +569,20 @@ private fun rememberTranscriptDisplayPosition(
     currentPositionMs: Long,
     pendingSeekPositionMs: Long?,
     isPlaying: Boolean,
+    playbackSpeed: Float,
 ): Long {
+    val speed = playbackSpeed.coerceIn(0.5f, 2.5f)
+    val maxAdvanceMs = (TranscriptPlaybackTickMs * speed).toLong().coerceAtLeast(100L)
     val clock = remember(episodeId) { Animatable(currentPositionMs.toFloat()) }
-    LaunchedEffect(episodeId, currentPositionMs, pendingSeekPositionMs, isPlaying) {
+    LaunchedEffect(episodeId, currentPositionMs, pendingSeekPositionMs, isPlaying, speed) {
         val pos = (pendingSeekPositionMs ?: currentPositionMs).toFloat()
         clock.snapTo(pos)
         if (isPlaying && pendingSeekPositionMs == null) {
-            clock.animateTo(pos + TranscriptPlaybackTickMs, tween(TranscriptPlaybackTickMs, easing = LinearEasing))
+            clock.animateTo(pos + maxAdvanceMs, tween(TranscriptPlaybackTickMs, easing = LinearEasing))
         }
     }
     val clockMs = clock.value.toLong()
-    return pendingSeekPositionMs ?: if (isPlaying && abs(clockMs - currentPositionMs) <= TranscriptPlaybackTickMs) {
+    return pendingSeekPositionMs ?: if (isPlaying && abs(clockMs - currentPositionMs) <= maxAdvanceMs + 50L) {
         clockMs
     } else {
         currentPositionMs
@@ -500,10 +594,13 @@ private fun SyncedTranscriptList(
     episodeId: String,
     rows: List<DisplayCaptionRow>,
     currentPositionMs: Long,
+    playbackSpeed: Float,
     isPlaying: Boolean,
     autoScrollEnabled: Boolean,
     pendingSeekPositionMs: Long?,
     seekRequestId: Long,
+    resyncTrigger: Long,
+    onBrowsingChanged: (Boolean) -> Unit,
     canSeek: Boolean,
     overrideActiveIndex: Int?,
     onSeek: (Long) -> Unit,
@@ -523,10 +620,20 @@ private fun SyncedTranscriptList(
     var returnedToForeground by rememberSaveable(episodeId) { mutableStateOf(false) }
     var previousPositionMs by rememberSaveable(episodeId) { mutableLongStateOf(currentPositionMs) }
     val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
-    val displayedPositionMs = rememberTranscriptDisplayPosition(episodeId, currentPositionMs, pendingSeekPositionMs, isPlaying)
+    val displayedPositionMs = rememberTranscriptDisplayPosition(
+        episodeId = episodeId,
+        currentPositionMs = currentPositionMs,
+        pendingSeekPositionMs = pendingSeekPositionMs,
+        isPlaying = isPlaying,
+        playbackSpeed = playbackSpeed,
+    )
 
     val activeIndex = remember(cues, displayedPositionMs, overrideActiveIndex) {
-        overrideActiveIndex ?: CaptionSyncEngine.findActiveCueIndex(cues, displayedPositionMs).coerceAtLeast(0)
+        overrideActiveIndex ?: CaptionSyncEngine.findActiveCueIndex(cues, displayedPositionMs)
+    }
+
+    LaunchedEffect(isBrowsing) {
+        onBrowsingChanged(isBrowsing)
     }
 
     DisposableEffect(lifecycleOwner, episodeId) {
@@ -582,13 +689,13 @@ private fun SyncedTranscriptList(
         }
     }
 
-    LaunchedEffect(seekRequestId) {
-        if (seekRequestId > 0L) {
+    LaunchedEffect(seekRequestId, resyncTrigger) {
+        if (seekRequestId > 0L || resyncTrigger > 0L) {
             isBrowsing = false
             selectedLineIndex = null
-            scrollToActive(activeIndex, animate = true)
+            scrollToActive(activeIndex.coerceAtLeast(0), animate = true)
             hasPositionedInitial = true
-            previousActiveIndex = activeIndex
+            previousActiveIndex = activeIndex.coerceAtLeast(0)
         }
     }
 
@@ -607,20 +714,21 @@ private fun SyncedTranscriptList(
 
     LaunchedEffect(rows.size, activeIndex, isBrowsing, selectedLineIndex, returnedToForeground, autoScrollEnabled) {
         if (!autoScrollEnabled || isBrowsing || selectedLineIndex != null) return@LaunchedEffect
+        val safeTarget = activeIndex.coerceAtLeast(0)
         if (!hasPositionedInitial) {
-            scrollToActive(activeIndex, animate = false)
+            scrollToActive(safeTarget, animate = false)
             hasPositionedInitial = true
             returnedToForeground = false
         } else {
             val prevVisible = previousActiveIndex?.let { idx ->
                 listState.layoutInfo.visibleItemsInfo.any { it.index == idx }
             } ?: false
-            if (prevVisible || returnedToForeground || activeIndex == rows.lastIndex) {
-                scrollToActive(activeIndex, animate = !returnedToForeground)
+            if (prevVisible || returnedToForeground || safeTarget == rows.lastIndex) {
+                scrollToActive(safeTarget, animate = !returnedToForeground)
                 returnedToForeground = false
             }
         }
-        previousActiveIndex = activeIndex
+        previousActiveIndex = safeTarget
     }
 
     LazyColumn(
@@ -629,10 +737,12 @@ private fun SyncedTranscriptList(
         modifier = modifier.testTag("synced_transcript_list"),
     ) {
         itemsIndexed(rows, key = { _, row -> row.key }) { index, row ->
+            val distance = if (activeIndex < 0) index + 1 else abs(index - activeIndex)
             SyncedTranscriptRow(
                 cue = row.cue,
+                translation = row.translation,
                 isPartial = row.isPartial,
-                distance = abs(index - activeIndex),
+                distance = distance,
                 focusMode = !isBrowsing,
                 onClick = {
                     if (canSeek && !row.isPartial) {
@@ -651,6 +761,7 @@ private fun SyncedTranscriptList(
 @Composable
 private fun SyncedTranscriptRow(
     cue: TranscriptCue,
+    translation: String?,
     isPartial: Boolean,
     distance: Int,
     focusMode: Boolean,
@@ -748,17 +859,26 @@ private fun SyncedTranscriptRow(
                 }
             },
         )
+        if (!translation.isNullOrBlank()) {
+            Text(
+                text = translation,
+                color = colors.onPrimary.copy(alpha = (opacity * 0.78f).coerceIn(0.10f, 0.86f)),
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
     }
 }
 
 @Composable
-private fun PlainTranscriptList(cues: List<TranscriptCue>, modifier: Modifier) {
+private fun PlainTranscriptList(rows: List<DisplayCaptionRow>, modifier: Modifier) {
     val colors = LocalPodcastyColors.current
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(vertical = 12.dp),
     ) {
-        itemsIndexed(cues, key = { index, cue -> "${cue.id}_$index" }) { _, cue ->
+        itemsIndexed(rows, key = { index, row -> "${row.key}_$index" }) { _, row ->
+            val cue = row.cue
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 cue.speaker?.let { speaker ->
                     Text(
@@ -773,6 +893,14 @@ private fun PlainTranscriptList(cues: List<TranscriptCue>, modifier: Modifier) {
                     color = colors.onPrimary,
                     style = MaterialTheme.typography.bodyLarge,
                 )
+                if (!row.translation.isNullOrBlank()) {
+                    Text(
+                        text = row.translation,
+                        color = colors.foregroundSubtle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
             }
         }
     }

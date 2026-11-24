@@ -22,6 +22,8 @@ class CaptionSyncEngine {
 
     private val _snapshot = MutableStateFlow(CaptionSyncSnapshot())
     val snapshot: StateFlow<CaptionSyncSnapshot> = _snapshot.asStateFlow()
+    val hasActiveSubscribers: Boolean
+        get() = _snapshot.subscriptionCount.value > 0
 
     fun loadDocument(document: TranscriptDocument, initialPositionMs: Long = 0L) {
         currentDocument = document
@@ -80,6 +82,7 @@ class CaptionSyncEngine {
             activeCue = activeCue,
             previousCue = previousCue,
             nextCue = nextCue,
+            nextCueStartMs = nextCue?.startMs,
             totalCues = if (sortedTimedCues.isNotEmpty()) sortedTimedCues.size else currentDocument.cues.size,
             isTimed = sortedTimedCues.isNotEmpty(),
         )
@@ -88,11 +91,11 @@ class CaptionSyncEngine {
     companion object {
         /**
          * Binary searches for the last cue whose startMs <= positionMs.
-         * Returns -1 when cues are empty or position is before the first cue.
+         * Returns -1 when cues are empty or playback position is before the first lyric cue (intro).
          */
         fun findActiveCueIndex(cues: List<TranscriptCue>, positionMs: Long): Int {
             if (cues.isEmpty()) return -1
-            if (positionMs < cues[0].startMs) return 0
+            if (positionMs < cues[0].startMs) return -1
             var low = 0
             var high = cues.lastIndex
             var result = 0

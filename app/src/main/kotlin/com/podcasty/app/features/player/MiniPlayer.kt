@@ -4,6 +4,7 @@
  */
 package com.podcasty.app.features.player
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -12,6 +13,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -79,6 +83,7 @@ import com.podcasty.app.domain.PlaybackState
 import com.podcasty.app.domain.durationMsOrZero
 import com.podcasty.app.domain.itemOrNull
 import com.podcasty.app.domain.positionMsOrZero
+import com.podcasty.app.transcript.CaptionSyncSnapshot
 import com.podcasty.app.ui.components.AnimatedPlayPauseSymbol
 import com.podcasty.app.ui.components.AnimatedSkipSymbol
 import com.podcasty.app.ui.components.EpisodeContextBottomSheetRequest
@@ -104,6 +109,8 @@ private const val MetadataSwipeVelocityPxPerMs = 1.2f
 fun MiniPlayer(
     playbackState: PlaybackState,
     playbackPositionFlow: StateFlow<Long>? = null,
+    captionSyncFlow: StateFlow<CaptionSyncSnapshot>? = null,
+    showMiniPlayerLyrics: Boolean = true,
     playbackQueue: PlaybackQueueSnapshot = PlaybackQueueSnapshot(),
     hazeState: HazeState?,
     compact: Boolean = false,
@@ -112,6 +119,7 @@ fun MiniPlayer(
     onNextClick: () -> Unit,
     onDismiss: () -> Unit,
     onOpenFullScreenPlayer: () -> Unit,
+    onOpenFullScreenLyrics: (() -> Unit)? = null,
     onFullScreenPlayerDrag: (Float) -> Unit,
     onFullScreenPlayerDragEnd: (Boolean) -> Unit,
     contextEpisode: Episode? = null,
@@ -397,12 +405,13 @@ fun MiniPlayer(
                                     fade = true,
                                     continuous = isPlaying,
                                 )
-                                PodcastyMarqueeText(
-                                    text = item.podcastTitle,
-                                    color = colors.textMuted,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fade = true,
-                                    continuous = isPlaying,
+                                MiniPlayerSubtitleOrLyric(
+                                    episodeId = item.episodeId,
+                                    fallbackSubtitle = item.podcastTitle,
+                                    captionSyncFlow = captionSyncFlow,
+                                    showMiniPlayerLyrics = showMiniPlayerLyrics,
+                                    isPlaying = isPlaying,
+                                    onOpenFullScreenLyrics = onOpenFullScreenLyrics,
                                 )
                             }
                         }
@@ -464,6 +473,74 @@ fun MiniPlayer(
             onGoToHost = { onEpisodeGoToHost(it.hostId) },
             onBottomSheetRequested = onEpisodeContextBottomSheet,
         ) { MiniPlayerSurface() }
+    }
+}
+
+/**
+ * Isolated recomposition scope for the Mini Player's second line so synchronized lyric transitions
+ * animate smoothly without recomposing artwork, blur chrome, or playback buttons.
+ */
+@Composable
+private fun MiniPlayerSubtitleOrLyric(
+    episodeId: String,
+    fallbackSubtitle: String,
+    captionSyncFlow: StateFlow<CaptionSyncSnapshot>?,
+    showMiniPlayerLyrics: Boolean,
+    isPlaying: Boolean,
+    onOpenFullScreenLyrics: (() -> Unit)?,
+) {
+    val colors = LocalPodcastyColors.current
+    val snapshot = if (showMiniPlayerLyrics && captionSyncFlow != null) {
+        captionSyncFlow.collectAsStateWithLifecycle().value
+    } else {
+        null
+    }
+    val activeLyric = snapshot
+        ?.takeIf { it.isTimed && it.episodeId == episodeId }
+        ?.activeCue
+        ?.text
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+    val displayText = if (activeLyric != null) "♪ $activeLyric" else fallbackSubtitle
+    val isShowingLyric = activeLyric != null
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (isShowingLyric && onOpenFullScreenLyrics != null) {
+                    Modifier.clickable(
+                        role = Role.Button,
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpenFullScreenLyrics,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        AnimatedContent(
+            targetState = displayText to isShowingLyric,
+            transitionSpec = {
+                (slideInVertically(tween(220, easing = FastOutSlowInEasing)) { it / 2 } +
+                    fadeIn(tween(220))) togetherWith
+                    (slideOutVertically(tween(160, easing = FastOutSlowInEasing)) { -it / 2 } +
+                        fadeOut(tween(160)))
+            },
+            label = "mini-player-lyric-line",
+        ) { (text, isLyric) ->
+            PodcastyMarqueeText(
+                text = text,
+                color = if (isLyric) colors.primary.copy(alpha = 0.92f) else colors.textMuted,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = if (isLyric) FontWeight.Medium else FontWeight.Normal,
+                ),
+                fade = true,
+                continuous = isPlaying,
+            )
+        }
     }
 }
 

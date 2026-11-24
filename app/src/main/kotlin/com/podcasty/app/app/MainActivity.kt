@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
         get() = (application as PodcastyApplication).container
 
     private var systemMusicVolumeState by mutableFloatStateOf(0.5f)
+    private var openFullScreenLyricsRequestId by mutableStateOf(0L)
 
     // Modal state hosted safely at Activity level for SAF launchers & playback notices
     private var activeNoticeDialog by mutableStateOf<PlaybackUiNotice.Info?>(null)
@@ -377,6 +378,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (intent?.getBooleanExtra(ExtraOpenFullScreenLyrics, false) == true) {
+            openFullScreenLyricsRequestId += 1L
+            intent.removeExtra(ExtraOpenFullScreenLyrics)
+        }
         updateRequestedOrientation(resources.configuration)
         systemMusicVolumeState = currentSystemMusicVolume()
         lifecycleScope.launch {
@@ -440,6 +445,14 @@ class MainActivity : ComponentActivity() {
                 autoLibraryRefresh = settings.autoLibraryRefresh,
                 includeSubfolders = settings.includeSubfolders,
             )
+            container.scanCoordinator.syncArtworkUpgradeIfNeeded(
+                currentResolverVersion = settings.artworkResolverVersion,
+                includeSubfolders = settings.includeSubfolders,
+            ) {
+                container.preferences.setArtworkResolverVersion(
+                    com.podcasty.app.storage.LocalArtworkResolver.CurrentArtworkResolverVersion,
+                )
+            }
         }
 
         setContent {
@@ -574,6 +587,8 @@ class MainActivity : ComponentActivity() {
                 listeningHistory = listeningHistory,
                 playbackState = playbackState,
                 playbackPositionFlow = container.playbackController.playbackPositionMs,
+                captionSyncFlow = container.playbackController.captionSync,
+                openFullScreenLyricsRequestId = openFullScreenLyricsRequestId,
                 currentPlaybackEpisode = currentPlaybackEpisode,
                 playbackQueue = playbackQueue,
                 sleepTimer = sleepTimer,
@@ -835,6 +850,15 @@ class MainActivity : ComponentActivity() {
                 },
                 onShowLockScreenLyricsChanged = { v ->
                     scope.launch { container.preferences.setShowLockScreenLyrics(v) }
+                },
+                onLockScreenLyricsExpandedChanged = { v ->
+                    scope.launch { container.preferences.setLockScreenLyricsExpanded(v) }
+                },
+                onShowMiniPlayerLyricsChanged = { v ->
+                    scope.launch { container.preferences.setShowMiniPlayerLyrics(v) }
+                },
+                onShowLyricsTranslationChanged = { v ->
+                    scope.launch { container.preferences.setShowLyricsTranslation(v) }
                 },
                 onShowTranscriptNotificationChanged = { v ->
                     scope.launch { container.preferences.setShowTranscriptNotification(v) }
@@ -1245,6 +1269,7 @@ class MainActivity : ComponentActivity() {
                     is TagSaveResult.SavedInPlace -> {
                         val artPath = persistEditedArtworkCache(ep.id, updated)
                         container.repository.updateEpisodeAfterTagEdit(ep.id, result.verifiedTags, artPath)
+                        container.playbackController.refreshCurrentEpisode(ep.id)
                         isSavingTags = false
                         tagEditorEpisodes = emptyList()
                         activeNoticeDialog = PlaybackUiNotice.Info("Tags saved", "Verified and updated metadata for \"${result.verifiedTags.title}\".")
@@ -1268,6 +1293,7 @@ class MainActivity : ComponentActivity() {
                 targets.forEach { ep ->
                     val artPath = if (updated.artworkModified) persistEditedArtworkCache(ep.id, updated) else null
                     container.repository.updateEpisodeAfterTagEdit(ep.id, updated, artPath)
+                    container.playbackController.refreshCurrentEpisode(ep.id)
                 }
                 isSavingTags = false
                 tagEditorEpisodes = emptyList()
@@ -1287,10 +1313,7 @@ class MainActivity : ComponentActivity() {
 
     private fun persistEditedArtworkCache(episodeId: String, tags: EditableAudioTags): String? {
         if (!tags.artworkModified || tags.removeArtwork || tags.artworkBytes == null) return null
-        val dir = File(cacheDir, "local_artwork").apply { mkdirs() }
-        val file = File(dir, "${episodeId}_${System.currentTimeMillis()}.img")
-        file.writeBytes(tags.artworkBytes)
-        return file.absolutePath
+        return container.localMusicScanner.artworkResolver.validateAndCacheImageBytes(tags.artworkBytes)
     }
 
     private fun triggerMediaStoreScan() {
@@ -1311,6 +1334,15 @@ class MainActivity : ComponentActivity() {
             if (c.moveToFirst()) c.getString(0) else null
         }
     }.getOrNull() ?: uri.lastPathSegment
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(ExtraOpenFullScreenLyrics, false)) {
+            openFullScreenLyricsRequestId += 1L
+            intent.removeExtra(ExtraOpenFullScreenLyrics)
+        }
+    }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -1365,7 +1397,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
-        const val NotificationPermissionRequest = 51
+    companion object {
+        const val ExtraOpenFullScreenLyrics = "com.podcasty.app.extra.OPEN_FULL_SCREEN_LYRICS"
+        private const val NotificationPermissionRequest = 51
     }
 }

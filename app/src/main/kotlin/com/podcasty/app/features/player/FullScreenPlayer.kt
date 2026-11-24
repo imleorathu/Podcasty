@@ -94,6 +94,10 @@ fun FullScreenPlayer(
     autoSyncLyrics: Boolean = true,
     autoScrollLyrics: Boolean = true,
     captionFontScale: Float = 1.0f,
+    showLyricsTranslation: Boolean = true,
+    openLyricsRequestId: Long = 0L,
+    onCaptionFontScaleSelected: ((Float) -> Unit)? = null,
+    onToggleLyricsTranslation: ((Boolean) -> Unit)? = null,
     sleepFadeOutSeconds: Int = 30,
     activeTranscriptDocument: TranscriptDocument? = null,
     availableTranscriptDocuments: List<TranscriptDocument> = emptyList(),
@@ -197,6 +201,11 @@ fun FullScreenPlayer(
     LaunchedEffect(selectedPanel, visible) {
         if (!visible || selectedPanel != FullScreenPlayerPanel.Queue) {
             isQueueReordering = false
+        }
+    }
+    LaunchedEffect(openLyricsRequestId) {
+        if (openLyricsRequestId > 0L) {
+            selectedPanel = FullScreenPlayerPanel.Transcript
         }
     }
 
@@ -350,11 +359,15 @@ fun FullScreenPlayer(
                         FullScreenPlayerTranscriptPanel(
                             episodeId = item.episodeId,
                             transcript = contextEpisode?.transcriptLrc,
+                            playbackSpeed = playbackSpeed,
                             useLargeText = layoutMode == PlayerLayoutMode.Wide && safeHeight >= 480.dp,
                             textScale = if (isLargeWidePlayer(safeWidth.value, safeHeight.value)) 1.5f else 1f,
                             captionFontScale = captionFontScale,
                             autoSyncEnabled = autoSyncLyrics,
                             autoScrollEnabled = autoScrollLyrics,
+                            showTranslation = showLyricsTranslation,
+                            onToggleTranslation = onToggleLyricsTranslation,
+                            onFontScaleChange = onCaptionFontScaleSelected,
                             activeDocument = activeTranscriptDocument,
                             availableDocuments = availableTranscriptDocuments,
                             isYouTubeReference = contextEpisode?.isYouTubeReference == true,

@@ -13,6 +13,7 @@ data class TranscriptCue(
     val endMs: Long,
     val text: String,
     val speaker: String? = null,
+    val translation: String? = null,
 )
 
 enum class TranscriptFormat(val key: String, val label: String) {
@@ -61,6 +62,7 @@ data class CaptionSyncSnapshot(
     val activeCue: TranscriptCue? = null,
     val previousCue: TranscriptCue? = null,
     val nextCue: TranscriptCue? = null,
+    val nextCueStartMs: Long? = null,
     val totalCues: Int = 0,
     val isTimed: Boolean = false,
 )

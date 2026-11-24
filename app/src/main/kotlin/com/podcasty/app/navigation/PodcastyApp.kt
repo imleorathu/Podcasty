@@ -110,6 +110,7 @@ import com.podcasty.app.podcast.ParsedPodcastEpisode
 import com.podcasty.app.podcast.ParsedPodcastFeed
 import com.podcasty.app.storage.LibraryScanState
 import com.podcasty.app.storage.UsbVolumeSummary
+import com.podcasty.app.transcript.CaptionSyncSnapshot
 import com.podcasty.app.transcript.TranscriptDocument
 import com.podcasty.app.features.categories.CategoriesScreen
 import com.podcasty.app.features.categories.CategoriesUiState
@@ -182,6 +183,8 @@ data class PodcastyAppModels(
     val listeningHistory: List<ListeningHistoryEntry>,
     val playbackState: PlaybackState,
     val playbackPositionFlow: StateFlow<Long> = MutableStateFlow(0L),
+    val captionSyncFlow: StateFlow<CaptionSyncSnapshot> = MutableStateFlow(CaptionSyncSnapshot()),
+    val openFullScreenLyricsRequestId: Long = 0L,
     val currentPlaybackEpisode: Episode? = null,
     val playbackQueue: PlaybackQueueSnapshot,
     val sleepTimer: SleepTimerState,
@@ -314,6 +317,9 @@ data class PodcastyAppCallbacks(
     val onPreferredTranscriptLanguageSelected: (String) -> Unit,
     val onCaptionFontScaleSelected: (Float) -> Unit,
     val onShowLockScreenLyricsChanged: (Boolean) -> Unit,
+    val onLockScreenLyricsExpandedChanged: (Boolean) -> Unit = {},
+    val onShowMiniPlayerLyricsChanged: (Boolean) -> Unit = {},
+    val onShowLyricsTranslationChanged: (Boolean) -> Unit = {},
     val onShowLockScreenCaptionsChanged: (Boolean) -> Unit,
     val onShowTranscriptNotificationChanged: (Boolean) -> Unit,
     val onResumePreviousPlaybackChanged: (Boolean) -> Unit,
@@ -404,6 +410,7 @@ fun PodcastyApp(
 
         val showsMiniPlayer = models.playbackState.showsMiniPlayer()
         var isFullScreenPlayerVisible by rememberSaveable { mutableStateOf(false) }
+        var openLyricsPanelRequestId by remember { mutableStateOf(0L) }
         LaunchedEffect(Unit) {
             if (isFullScreenPlayerVisible) callbacks.onFullScreenPlayerVisibilityChanged(true)
         }
@@ -424,6 +431,14 @@ fun PodcastyApp(
             if (isFullScreenPlayerVisible == visible) return
             isFullScreenPlayerVisible = visible
             callbacks.onFullScreenPlayerVisibilityChanged(visible)
+        }
+
+        LaunchedEffect(models.openFullScreenLyricsRequestId) {
+            if (models.openFullScreenLyricsRequestId > 0L) {
+                isFullScreenPlayerOpeningFromSwipe = false
+                setFullScreenVisible(true)
+                openLyricsPanelRequestId += 1L
+            }
         }
 
         fun closeFullScreenPlayerThen(action: () -> Unit) {
@@ -804,6 +819,9 @@ fun PodcastyApp(
                                                 onLanguageSelected = callbacks.onPreferredTranscriptLanguageSelected,
                                                 onFontScaleSelected = callbacks.onCaptionFontScaleSelected,
                                                 onShowLockScreenLyricsChanged = callbacks.onShowLockScreenLyricsChanged,
+                                                onLockScreenLyricsExpandedChanged = callbacks.onLockScreenLyricsExpandedChanged,
+                                                onShowMiniPlayerLyricsChanged = callbacks.onShowMiniPlayerLyricsChanged,
+                                                onShowLyricsTranslationChanged = callbacks.onShowLyricsTranslationChanged,
                                                 onShowLockScreenCaptionsChanged = callbacks.onShowLockScreenCaptionsChanged,
                                                 onShowTranscriptNotificationChanged = callbacks.onShowTranscriptNotificationChanged,
                                                 onKeepScreenOnChanged = callbacks.onKeepScreenOnChanged,
@@ -1402,6 +1420,8 @@ fun PodcastyApp(
                     selectedDestination = uiState.selectedDestination,
                     playbackState = models.playbackState,
                     playbackPositionFlow = models.playbackPositionFlow,
+                    captionSyncFlow = models.captionSyncFlow,
+                    showMiniPlayerLyrics = models.userSettings.showMiniPlayerLyrics,
                     playbackQueue = models.playbackQueue,
                     hazeState = hazeState,
                     compact = showsMiniPlayer && isNavigationCompact,
@@ -1434,6 +1454,11 @@ fun PodcastyApp(
                     onOpenFullScreenPlayer = {
                         isFullScreenPlayerOpeningFromSwipe = false
                         setFullScreenVisible(true)
+                    },
+                    onOpenFullScreenLyrics = {
+                        isFullScreenPlayerOpeningFromSwipe = false
+                        setFullScreenVisible(true)
+                        openLyricsPanelRequestId += 1L
                     },
                     onFullScreenPlayerDrag = { progress ->
                         isFullScreenPlayerDragging = true
@@ -1479,6 +1504,10 @@ fun PodcastyApp(
                     autoSyncLyrics = models.userSettings.autoSyncLyrics,
                     autoScrollLyrics = models.userSettings.autoScrollLyrics,
                     captionFontScale = models.userSettings.captionFontSizeScale,
+                    showLyricsTranslation = models.userSettings.showLyricsTranslation,
+                    openLyricsRequestId = openLyricsPanelRequestId,
+                    onCaptionFontScaleSelected = callbacks.onCaptionFontScaleSelected,
+                    onToggleLyricsTranslation = callbacks.onShowLyricsTranslationChanged,
                     sleepFadeOutSeconds = models.userSettings.sleepFadeOutSeconds,
                     activeTranscriptDocument = models.activeTranscriptDocument,
                     availableTranscriptDocuments = models.availableTranscriptDocuments,

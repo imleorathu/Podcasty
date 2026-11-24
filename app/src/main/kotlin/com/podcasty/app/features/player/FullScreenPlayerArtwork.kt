@@ -5,6 +5,7 @@
 package com.podcasty.app.features.player
 
 import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -125,17 +126,29 @@ private fun ArtworkLayer(artwork: FullScreenArtwork?, alpha: Float) {
     }
 }
 
+private val fullScreenArtworkCache = LruCache<String, FullScreenArtwork>(6).also { cache ->
+    com.podcasty.app.ui.components.onArtworkCacheInvalidated = { path ->
+        if (path == null) cache.evictAll() else cache.remove(path)
+    }
+}
+
 @Composable
 internal fun rememberFullscreenArtwork(artworkPath: String?): FullScreenArtwork? {
     val context = LocalContext.current
-    var artwork by remember { mutableStateOf<FullScreenArtwork?>(null) }
-    LaunchedEffect(artworkPath) {
-        if (artworkPath.isNullOrBlank()) {
+    val normalizedPath = artworkPath?.trim()?.takeIf { it.isNotEmpty() }
+    // Reset synchronously whenever artworkPath changes so switching tracks NEVER shows the
+    // previous track's cover while the new track decodes (or when the new track has no cover).
+    var artwork by remember(normalizedPath) {
+        mutableStateOf(normalizedPath?.let { fullScreenArtworkCache.get(it) })
+    }
+    LaunchedEffect(normalizedPath) {
+        if (normalizedPath == null) {
             artwork = null
             return@LaunchedEffect
         }
-        artwork = withContext(Dispatchers.IO) {
-            val bitmap = decodeArtworkBitmap(context, artworkPath, 1080, Bitmap.Config.ARGB_8888)
+        if (artwork != null) return@LaunchedEffect
+        val loaded = withContext(Dispatchers.IO) {
+            val bitmap = decodeArtworkBitmap(context, normalizedPath, 1080, Bitmap.Config.ARGB_8888)
                 ?: return@withContext null
             val thumbnail = Bitmap.createScaledBitmap(bitmap, 64, 64, false)
             val pixels = IntArray(64 * 64)
@@ -151,6 +164,10 @@ internal fun rememberFullscreenArtwork(artworkPath: String?): FullScreenArtwork?
                 palette = extractArtworkPalette(pixels, backdropPixels),
             )
         }
+        if (loaded != null) {
+            fullScreenArtworkCache.put(normalizedPath, loaded)
+        }
+        artwork = loaded
     }
     return artwork
 }

@@ -56,12 +56,16 @@ data class PodcastUserSettings(
     val musicLibraryCategory: MusicLibraryCategory = MusicLibraryCategory.Folders,
     val lastFolderTreeUri: String? = null,
     val lastFolderSubpath: String = "",
+    val artworkResolverVersion: Int = 0,
     // Lyrics & Captions (music lock-screen lyrics ON by default; AI podcast caption notification OFF by default)
     val autoSyncLyrics: Boolean = true,
     val autoScrollLyrics: Boolean = true,
     val preferredTranscriptLanguage: String = "en",
     val captionFontSizeScale: Float = 1.0f,
     val showLockScreenLyrics: Boolean = true,
+    val lockScreenLyricsExpanded: Boolean = true,
+    val showMiniPlayerLyrics: Boolean = true,
+    val showLyricsTranslation: Boolean = true,
     val showLockScreenCaptions: Boolean = false,
     val showTranscriptNotification: Boolean = false,
     val hasRequestedNotificationPermission: Boolean = false,
@@ -127,12 +131,16 @@ class PodcastPreferencesRepository(private val context: Context) {
         val MusicLibraryCategoryKey = stringPreferencesKey("music_library_category")
         val LastFolderTreeUriKey = stringPreferencesKey("last_folder_tree_uri")
         val LastFolderSubpathKey = stringPreferencesKey("last_folder_subpath")
+        val ArtworkResolverVersionKey = intPreferencesKey("artwork_resolver_version")
 
         val AutoSyncLyricsKey = booleanPreferencesKey("auto_sync_lyrics")
         val AutoScrollLyricsKey = booleanPreferencesKey("auto_scroll_lyrics")
         val PreferredTranscriptLanguageKey = stringPreferencesKey("preferred_transcript_language")
         val CaptionFontSizeScaleKey = floatPreferencesKey("caption_font_size_scale")
         val ShowLockScreenLyricsKey = booleanPreferencesKey("show_lock_screen_lyrics")
+        val LockScreenLyricsExpandedKey = booleanPreferencesKey("lock_screen_lyrics_expanded")
+        val ShowMiniPlayerLyricsKey = booleanPreferencesKey("show_mini_player_lyrics")
+        val ShowLyricsTranslationKey = booleanPreferencesKey("show_lyrics_translation")
         val ShowLockScreenCaptionsKey = booleanPreferencesKey("show_lock_screen_captions")
         val ShowTranscriptNotificationKey = booleanPreferencesKey("show_transcript_notification")
         val HasRequestedNotificationPermissionKey = booleanPreferencesKey("has_requested_notification_permission")
@@ -213,11 +221,15 @@ class PodcastPreferencesRepository(private val context: Context) {
             } ?: MusicLibraryCategory.Folders,
             lastFolderTreeUri = prefs[Keys.LastFolderTreeUriKey],
             lastFolderSubpath = prefs[Keys.LastFolderSubpathKey] ?: "",
+            artworkResolverVersion = prefs[Keys.ArtworkResolverVersionKey] ?: 0,
             autoSyncLyrics = prefs[Keys.AutoSyncLyricsKey] ?: true,
             autoScrollLyrics = prefs[Keys.AutoScrollLyricsKey] ?: true,
             preferredTranscriptLanguage = prefs[Keys.PreferredTranscriptLanguageKey] ?: "en",
             captionFontSizeScale = (prefs[Keys.CaptionFontSizeScaleKey] ?: 1.0f).coerceIn(0.75f, 1.5f),
             showLockScreenLyrics = prefs[Keys.ShowLockScreenLyricsKey] ?: true,
+            lockScreenLyricsExpanded = prefs[Keys.LockScreenLyricsExpandedKey] ?: true,
+            showMiniPlayerLyrics = prefs[Keys.ShowMiniPlayerLyricsKey] ?: true,
+            showLyricsTranslation = prefs[Keys.ShowLyricsTranslationKey] ?: true,
             showLockScreenCaptions = prefs[Keys.ShowLockScreenCaptionsKey] ?: false,
             showTranscriptNotification = prefs[Keys.ShowTranscriptNotificationKey] ?: false,
             hasRequestedNotificationPermission = prefs[Keys.HasRequestedNotificationPermissionKey] ?: false,
@@ -375,6 +387,10 @@ class PodcastPreferencesRepository(private val context: Context) {
         }
     }
 
+    suspend fun setArtworkResolverVersion(version: Int) {
+        context.podcastyDataStore.edit { it[Keys.ArtworkResolverVersionKey] = version }
+    }
+
     suspend fun setAutoSyncLyrics(enabled: Boolean) {
         context.podcastyDataStore.edit { it[Keys.AutoSyncLyricsKey] = enabled }
     }
@@ -393,6 +409,18 @@ class PodcastPreferencesRepository(private val context: Context) {
 
     suspend fun setShowLockScreenLyrics(enabled: Boolean) {
         context.podcastyDataStore.edit { it[Keys.ShowLockScreenLyricsKey] = enabled }
+    }
+
+    suspend fun setLockScreenLyricsExpanded(expanded: Boolean) {
+        context.podcastyDataStore.edit { it[Keys.LockScreenLyricsExpandedKey] = expanded }
+    }
+
+    suspend fun setShowMiniPlayerLyrics(enabled: Boolean) {
+        context.podcastyDataStore.edit { it[Keys.ShowMiniPlayerLyricsKey] = enabled }
+    }
+
+    suspend fun setShowLyricsTranslation(enabled: Boolean) {
+        context.podcastyDataStore.edit { it[Keys.ShowLyricsTranslationKey] = enabled }
     }
 
     suspend fun setShowLockScreenCaptions(enabled: Boolean) {

@@ -287,6 +287,9 @@ fun LyricsCaptionsSettingsScreen(
     onLanguageSelected: (String) -> Unit,
     onFontScaleSelected: (Float) -> Unit,
     onShowLockScreenLyricsChanged: (Boolean) -> Unit,
+    onLockScreenLyricsExpandedChanged: (Boolean) -> Unit = {},
+    onShowMiniPlayerLyricsChanged: (Boolean) -> Unit = {},
+    onShowLyricsTranslationChanged: (Boolean) -> Unit = {},
     onShowLockScreenCaptionsChanged: (Boolean) -> Unit,
     onShowTranscriptNotificationChanged: (Boolean) -> Unit,
     onKeepScreenOnChanged: (Boolean) -> Unit,
@@ -356,6 +359,36 @@ fun LyricsCaptionsSettingsScreen(
                             )
                         },
                         onClick = { onShowLockScreenLyricsChanged(!settings.showLockScreenLyrics) },
+                    ),
+                    ActionListItem(
+                        labelRes = R.string.lyrics_lock_screen_expanded,
+                        trailingContent = {
+                            Switch(
+                                checked = settings.lockScreenLyricsExpanded,
+                                onCheckedChange = onLockScreenLyricsExpandedChanged,
+                            )
+                        },
+                        onClick = { onLockScreenLyricsExpandedChanged(!settings.lockScreenLyricsExpanded) },
+                    ),
+                    ActionListItem(
+                        labelRes = R.string.lyrics_show_mini_player_lyrics,
+                        trailingContent = {
+                            Switch(
+                                checked = settings.showMiniPlayerLyrics,
+                                onCheckedChange = onShowMiniPlayerLyricsChanged,
+                            )
+                        },
+                        onClick = { onShowMiniPlayerLyricsChanged(!settings.showMiniPlayerLyrics) },
+                    ),
+                    ActionListItem(
+                        labelRes = R.string.lyrics_show_translation,
+                        trailingContent = {
+                            Switch(
+                                checked = settings.showLyricsTranslation,
+                                onCheckedChange = onShowLyricsTranslationChanged,
+                            )
+                        },
+                        onClick = { onShowLyricsTranslationChanged(!settings.showLyricsTranslation) },
                     ),
                     ActionListItem(
                         labelRes = R.string.lyrics_show_lock_screen_captions,

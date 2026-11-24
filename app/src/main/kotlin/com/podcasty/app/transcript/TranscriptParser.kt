@@ -233,8 +233,27 @@ object TranscriptParser {
         }
         if (raw.isEmpty()) return parsePlainText(content)
         val sorted = raw.sortedBy { it.startMs }
-        return sorted.mapIndexed { idx, entry ->
-            val nextStart = sorted.getOrNull(idx + 1)?.startMs
+        // Pair bilingual/translation LRC lines that share the same timestamp (<=50ms apart)
+        // instead of dropping the first line during binary search.
+        data class MergedEntry(val startMs: Long, val speaker: String?, val text: String, val translation: String?)
+        val merged = mutableListOf<MergedEntry>()
+        for (entry in sorted) {
+            val prev = merged.lastOrNull()
+            if (prev != null && kotlin.math.abs(entry.startMs - prev.startMs) <= 50L &&
+                prev.translation == null && !prev.text.equals(entry.text, ignoreCase = false)
+            ) {
+                merged[merged.lastIndex] = prev.copy(translation = entry.text)
+            } else {
+                merged += MergedEntry(
+                    startMs = entry.startMs,
+                    speaker = entry.speaker,
+                    text = entry.text,
+                    translation = null,
+                )
+            }
+        }
+        return merged.mapIndexed { idx, entry ->
+            val nextStart = merged.getOrNull(idx + 1)?.startMs
             val endMs = if (nextStart != null && nextStart > entry.startMs) nextStart else entry.startMs + 6_000L
             TranscriptCue(
                 id = idx.toLong() + 1L,
@@ -242,6 +261,7 @@ object TranscriptParser {
                 endMs = endMs,
                 text = entry.text,
                 speaker = entry.speaker,
+                translation = entry.translation,
             )
         }
     }
@@ -387,16 +407,23 @@ object TranscriptParser {
 
     fun toLrcString(cues: List<TranscriptCue>): String = buildString {
         cues.forEach { cue ->
-            if (cue.startMs >= 0L) {
+            val stamp = if (cue.startMs >= 0L) {
                 val mins = cue.startMs / 60_000L
                 val secs = (cue.startMs % 60_000L) / 1_000L
                 val centis = (cue.startMs % 1_000L) / 10L
-                append("[%02d:%02d.%02d]".format(mins, secs, centis))
+                "[%02d:%02d.%02d]".format(mins, secs, centis)
+            } else {
+                ""
             }
+            append(stamp)
             if (!cue.speaker.isNullOrBlank()) {
                 append("${cue.speaker}: ")
             }
             appendLine(cue.text)
+            if (!cue.translation.isNullOrBlank()) {
+                append(stamp)
+                appendLine(cue.translation)
+            }
         }
     }.trimEnd()
 

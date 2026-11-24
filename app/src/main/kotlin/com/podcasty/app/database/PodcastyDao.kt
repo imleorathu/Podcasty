@@ -50,6 +50,9 @@ interface PodcastyDao {
     @Query("SELECT * FROM podcasts WHERE id = :podcastId LIMIT 1")
     fun observePodcastById(podcastId: String): Flow<PodcastEntity?>
 
+    @Query("SELECT * FROM podcasts WHERE id = :podcastId LIMIT 1")
+    suspend fun getPodcastById(podcastId: String): PodcastEntity?
+
     @Query(
         """
         SELECT id, podcastId, podcastTitle, hostId, hostName, categoryId, categoryName,
@@ -275,6 +278,9 @@ interface PodcastyDao {
         """,
     )
     suspend fun getDedupSignaturesExcludingFolder(folderUri: String): List<TrackDedupSignature>
+
+    @Query("SELECT DISTINCT artworkAsset FROM episodes WHERE artworkAsset IS NOT NULL AND artworkAsset != ''")
+    suspend fun getAllReferencedArtworkPaths(): List<String>
 
     @Query(
         """

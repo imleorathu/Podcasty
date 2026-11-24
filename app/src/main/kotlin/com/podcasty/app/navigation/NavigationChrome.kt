@@ -34,6 +34,7 @@ import com.podcasty.app.domain.showsMiniPlayer
 import com.podcasty.app.features.player.MiniPlayer
 import com.podcasty.app.features.player.MiniPlayerHeight
 import com.podcasty.app.features.player.MiniPlayerNavigationGap
+import com.podcasty.app.transcript.CaptionSyncSnapshot
 import com.podcasty.app.ui.components.EpisodeContextBottomSheetRequest
 
 @Composable
@@ -41,6 +42,8 @@ internal fun NavigationChrome(
     selectedDestination: AppDestination,
     playbackState: PlaybackState,
     playbackPositionFlow: StateFlow<Long>? = null,
+    captionSyncFlow: StateFlow<CaptionSyncSnapshot>? = null,
+    showMiniPlayerLyrics: Boolean = true,
     playbackQueue: PlaybackQueueSnapshot = PlaybackQueueSnapshot(),
     hazeState: HazeState?,
     compact: Boolean = false,
@@ -51,6 +54,7 @@ internal fun NavigationChrome(
     onNextClick: () -> Unit,
     onMiniPlayerDismiss: () -> Unit,
     onOpenFullScreenPlayer: () -> Unit = {},
+    onOpenFullScreenLyrics: (() -> Unit)? = null,
     onFullScreenPlayerDrag: (Float) -> Unit = {},
     onFullScreenPlayerDragEnd: (Boolean) -> Unit = {},
     contextEpisode: Episode? = null,
@@ -113,6 +117,8 @@ internal fun NavigationChrome(
                 MiniPlayer(
                     playbackState = playbackState,
                     playbackPositionFlow = playbackPositionFlow,
+                    captionSyncFlow = captionSyncFlow,
+                    showMiniPlayerLyrics = showMiniPlayerLyrics,
                     playbackQueue = playbackQueue,
                     hazeState = hazeState,
                     compact = isCompact,
@@ -121,6 +127,7 @@ internal fun NavigationChrome(
                     onNextClick = onNextClick,
                     onDismiss = onMiniPlayerDismiss,
                     onOpenFullScreenPlayer = onOpenFullScreenPlayer,
+                    onOpenFullScreenLyrics = onOpenFullScreenLyrics,
                     onFullScreenPlayerDrag = onFullScreenPlayerDrag,
                     onFullScreenPlayerDragEnd = onFullScreenPlayerDragEnd,
                     contextEpisode = contextEpisode,

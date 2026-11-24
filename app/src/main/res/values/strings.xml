@@ -326,6 +326,11 @@
     <string name="lyrics_transcript_language">Transcript language</string>
     <string name="lyrics_caption_font_size">Caption font size</string>
     <string name="lyrics_show_lock_screen_lyrics">Lock screen synchronized lyrics</string>
+    <string name="lyrics_lock_screen_expanded">Expanded lock screen lyrics</string>
+    <string name="lyrics_show_mini_player_lyrics">Show live lyrics in mini player</string>
+    <string name="lyrics_show_translation">Show lyrics translation</string>
+    <string name="lyrics_resync">Sync</string>
+    <string name="lyrics_translation_chip">Translation</string>
     <string name="lyrics_show_lock_screen_captions">Show podcast captions on lock screen</string>
     <string name="lyrics_show_transcript_notification">Show transcript notification</string>
     <string name="lyrics_lock_screen_aod_helper">When enabled, Podcasty updates a silent companion notification alongside media controls with the synchronized lyric line and upcoming line. Lock-screen visibility always respects your Android privacy settings.</string>

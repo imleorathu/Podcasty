@@ -1074,6 +1074,11 @@ class PodcastRepositoryImpl(
         val nextTitle = tags.title.ifBlank { current.title }
         val nextArtist = tags.artist.ifBlank { current.hostName }
         val nextAlbum = tags.album.ifBlank { current.podcastTitle }
+        val nextArtwork = when {
+            tags.removeArtwork -> null
+            updatedArtworkPath != null -> updatedArtworkPath
+            else -> current.artworkAsset
+        }
         val updated = current.copy(
             title = nextTitle,
             hostName = nextArtist,
@@ -1089,13 +1094,18 @@ class PodcastRepositoryImpl(
             normalizedTitle = UnicodeSortUtil.normalizeKey(nextTitle),
             normalizedArtist = UnicodeSortUtil.normalizeKey(nextArtist),
             normalizedAlbum = UnicodeSortUtil.normalizeKey(nextAlbum),
-            artworkAsset = when {
-                tags.removeArtwork -> null
-                updatedArtworkPath != null -> updatedArtworkPath
-                else -> current.artworkAsset
-            },
+            artworkAsset = nextArtwork,
         )
         dao.upsertEpisode(updated)
+        if (current.artworkAsset != nextArtwork) {
+            com.podcasty.app.ui.components.invalidateArtworkCache(current.artworkAsset)
+            com.podcasty.app.ui.components.invalidateArtworkCache(nextArtwork)
+            dao.getPodcastById(current.podcastId)?.let { album ->
+                if (album.artworkAsset == current.artworkAsset || album.artworkAsset == null) {
+                    dao.insertPodcasts(listOf(album.copy(artworkAsset = nextArtwork)))
+                }
+            }
+        }
         notifyLibraryMutated()
     }
 
@@ -1382,6 +1392,9 @@ class PodcastRepositoryImpl(
             normalizedTitle = UnicodeSortUtil.normalizeKey(title),
             lastModifiedMs = lastModifiedMs,
         )
+        dao.getEpisodeById(episodeId)?.artworkAsset?.let {
+            com.podcasty.app.ui.components.invalidateArtworkCache(it)
+        }
         notifyLibraryMutated()
     }
 

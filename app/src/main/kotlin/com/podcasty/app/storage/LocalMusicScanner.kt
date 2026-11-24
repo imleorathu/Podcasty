@@ -7,8 +7,6 @@ package com.podcasty.app.storage
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -49,7 +47,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -94,9 +91,7 @@ class LocalMusicScanner(
     @Volatile
     var isPlaybackActive: Boolean = false
 
-    private val artworkCacheDir: File by lazy {
-        File(context.cacheDir, "local_artwork").apply { mkdirs() }
-    }
+    internal val artworkResolver: LocalArtworkResolver = LocalArtworkResolver(context)
 
     fun startBackgroundScanAllFolders(includeSubfoldersOverride: Boolean? = null) {
         val coord = scanCoordinator
@@ -233,7 +228,10 @@ class LocalMusicScanner(
         }.await()
     }
 
-    internal suspend fun scanAllFoldersInternal(includeSubfoldersOverride: Boolean? = null): LibraryScanState {
+    internal suspend fun scanAllFoldersInternal(
+        includeSubfoldersOverride: Boolean? = null,
+        recheckMissingArtwork: Boolean = false,
+    ): LibraryScanState {
         val folders = dao.getAllMusicFolders().filter { it.isEnabled }
         if (folders.isEmpty()) {
             val state = LibraryScanState(
@@ -249,14 +247,25 @@ class LocalMusicScanner(
         var lastErr: String? = null
         for (folder in folders) {
             currentCoroutineContext().ensureActive()
-            val res = scanFolderInternal(
-                treeUri = Uri.parse(folder.treeUri),
-                includeSubfolders = includeSubfoldersOverride ?: folder.includeSubfolders,
-            )
+            val res = if (folder.treeUri == StorageProviderType.MediaStore.key) {
+                scanMediaStoreAudioInternal(recheckMissingArtwork = recheckMissingArtwork)
+            } else {
+                scanFolderInternal(
+                    treeUri = Uri.parse(folder.treeUri),
+                    includeSubfolders = includeSubfoldersOverride ?: folder.includeSubfolders,
+                    recheckMissingArtwork = recheckMissingArtwork,
+                )
+            }
             totalScanned += res.scannedFiles
             totalAdded += res.addedCount
             totalRemoved += res.removedCount
             if (res.lastError != null) lastErr = res.lastError
+        }
+        if (lastErr == null) {
+            runCatching {
+                val referenced = dao.getAllReferencedArtworkPaths().toHashSet()
+                artworkResolver.pruneUnreferencedArtwork(referenced)
+            }
         }
         val finalState = LibraryScanState(
             isScanning = false,
@@ -284,6 +293,7 @@ class LocalMusicScanner(
     internal suspend fun scanFolderInternal(
         treeUri: Uri,
         includeSubfolders: Boolean = true,
+        recheckMissingArtwork: Boolean = false,
     ): LibraryScanState = scanMutex.withLock {
         val folderKey = treeUri.toString()
         val scanId = UUID.randomUUID().toString()
@@ -337,7 +347,8 @@ class LocalMusicScanner(
         val existingStamps = dao.getExistingTrackStampsForFolder(folderKey).associateBy { it.id }
         val seenIds = HashSet<String>(maxOf(256, existingStamps.size))
         val batchWriter = ScanBatchWriter(dao, onLibraryMutated)
-        val albumArtworkCache = HashMap<String, String?>()
+        val folderCoverMemo = HashMap<String, String?>()
+        val volatileArtMigrationMemo = HashMap<String, String?>()
 
         val now = System.currentTimeMillis()
         var discoveredCount = 0
@@ -361,20 +372,43 @@ class LocalMusicScanner(
             try {
                 val existingStamp = existingStamps[stableId]
                 val index = totalIndexedCount++
+                val existingArt = existingStamp?.artworkAsset
+                val existingArtInVolatileCache = existingArt != null &&
+                    existingArt.startsWith(context.cacheDir.absolutePath)
+                val migratedPersistentArt = if (existingArtInVolatileCache) {
+                    artworkResolver.migrateVolatileCachedArtwork(existingArt, volatileArtMigrationMemo)
+                } else {
+                    null
+                }
+                val existingArtUsable = when {
+                    migratedPersistentArt != null -> true
+                    existingArt != null && !existingArtInVolatileCache ->
+                        LocalArtworkResolver.isUsableCachedArtworkFile(existingArt)
+                    else -> false
+                }
+                val needsArtworkRefresh = when {
+                    existingStamp == null -> true
+                    existingArt != null && !existingArtUsable -> true
+                    existingArt == null && (recheckMissingArtwork || file.folderCoverUri != null) -> true
+                    else -> false
+                }
                 val canFastReuse = existingStamp != null &&
+                    !needsArtworkRefresh &&
                     existingStamp.fileSizeBytes == file.sizeBytes &&
                     existingStamp.durationMs > 0L &&
                     (file.lastModified <= 0L || existingStamp.lastModifiedMs == file.lastModified) &&
-                    (existingStamp.artworkAsset == null || File(existingStamp.artworkAsset).exists()) &&
                     (file.sidecarLyricsUri == null || existingStamp.hasLyrics)
 
-                if (canFastReuse && existingStamp != null) {
+                if (canFastReuse) {
                     val expectedAsset = if (file.relativeFolderPath.isNotBlank()) {
                         "${file.relativeFolderPath}/${file.displayName}"
                     } else {
                         file.displayName
                     }
-                    if (existingStamp.audioAsset != expectedAsset || existingStamp.relativeFolderPath != file.relativeFolderPath) {
+                    val needsPathOrArtUpdate = existingStamp.audioAsset != expectedAsset ||
+                        existingStamp.relativeFolderPath != file.relativeFolderPath ||
+                        migratedPersistentArt != null
+                    if (needsPathOrArtUpdate) {
                         val existingFull = dao.getEpisodeById(stableId)
                         if (existingFull != null) {
                             batchWriter.addEpisode(
@@ -382,6 +416,7 @@ class LocalMusicScanner(
                                     audioAsset = expectedAsset,
                                     relativeFolderPath = file.relativeFolderPath,
                                     lastModifiedMs = file.lastModified,
+                                    artworkAsset = migratedPersistentArt ?: existingFull.artworkAsset,
                                 ),
                             )
                         }
@@ -391,7 +426,16 @@ class LocalMusicScanner(
                         delay(12L)
                     }
                     val existingFull = existingStamp?.let { dao.getEpisodeById(stableId) }
-                    val parsed = extractMetadataForDocument(file, folderKey, stableId, existingFull, now, index)
+                    val parsed = extractMetadataForDocument(
+                        file = file,
+                        folderUri = folderKey,
+                        stableId = stableId,
+                        existing = existingFull,
+                        now = now,
+                        index = index,
+                        folderCoverMemo = folderCoverMemo,
+                        forceReextractArtwork = needsArtworkRefresh,
+                    )
                     if (existingFull == null) addedCount++
                     batchWriter.add(parsed)
                 }
@@ -445,6 +489,8 @@ class LocalMusicScanner(
 
                 val dirAudioFiles = ArrayList<DiscoveredDocFile>(32)
                 val sidecarFilesInDir = HashMap<String, Uri>(8)
+                var bestFolderCoverPriority = Int.MAX_VALUE
+                var bestFolderCoverUri: Uri? = null
                 val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, node.docId)
                 val projection = arrayOf(
                     DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -494,6 +540,12 @@ class LocalMusicScanner(
                                     if (baseKey.isNotEmpty()) {
                                         sidecarFilesInDir[baseKey] = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
                                     }
+                                } else if (LocalArtworkResolver.folderCoverPriority(name) >= 0) {
+                                    val coverPrio = LocalArtworkResolver.folderCoverPriority(name)
+                                    if (coverPrio in 0 until bestFolderCoverPriority && size > 32L) {
+                                        bestFolderCoverPriority = coverPrio
+                                        bestFolderCoverUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                                    }
                                 } else if (
                                     ext in AudioFormatCatalog.scannableExtensions ||
                                     docIdExt in AudioFormatCatalog.scannableExtensions ||
@@ -522,15 +574,18 @@ class LocalMusicScanner(
                     StorageLog.warn("Scanner", "Directory read error at '${node.relativeFolder}'; preserving existing tracks", dirErr)
                 }
 
-                // Match sidecars only for files discovered in this directory (O(1) per file)
+                // Match sidecars and folder cover image only for files discovered in this directory (O(1) per file)
                 for (audioFile in dirAudioFiles) {
-                    val matched = if (sidecarFilesInDir.isEmpty()) {
+                    var matched = if (sidecarFilesInDir.isEmpty()) {
                         audioFile
                     } else {
                         val baseKey = audioFile.displayName.substringBeforeLast('.').trim().lowercase()
                         val sidecarUri = sidecarFilesInDir[baseKey]
                             ?: sidecarFilesInDir.entries.firstOrNull { (k, _) -> k.startsWith("$baseKey.") }?.value
                         if (sidecarUri != null) audioFile.copy(sidecarLyricsUri = sidecarUri) else audioFile
+                    }
+                    if (bestFolderCoverUri != null) {
+                        matched = matched.copy(folderCoverUri = bestFolderCoverUri)
                     }
                     processDiscoveredFile(matched)
                 }
@@ -662,6 +717,7 @@ class LocalMusicScanner(
     internal suspend fun scanMediaStoreAudioInternal(
         sinceGeneration: Long = 0L,
         silentIncremental: Boolean = false,
+        recheckMissingArtwork: Boolean = false,
     ): LibraryScanState = scanMutex.withLock {
         val scanId = UUID.randomUUID().toString()
         val scanStartedAt = System.currentTimeMillis()
@@ -724,6 +780,8 @@ class LocalMusicScanner(
 
         val now = System.currentTimeMillis()
         val batchWriter = ScanBatchWriter(dao, onLibraryMutated)
+        val folderCoverMemo = HashMap<String, String?>()
+        val volatileArtMigrationMemo = HashMap<String, String?>()
         val seenIds = HashSet<String>(256)
         var discoveredCount = 0
         var addedCount = 0
@@ -765,13 +823,39 @@ class LocalMusicScanner(
                     try {
                         val existingStamp = existingFolderStamps[stableId]
                         val index = totalIndexedCount++
+                        val existingArt = existingStamp?.artworkAsset
+                        val existingArtInVolatileCache = existingArt != null &&
+                            existingArt.startsWith(context.cacheDir.absolutePath)
+                        val migratedPersistentArt = if (existingArtInVolatileCache) {
+                            artworkResolver.migrateVolatileCachedArtwork(existingArt, volatileArtMigrationMemo)
+                        } else {
+                            null
+                        }
+                        val existingArtUsable = when {
+                            migratedPersistentArt != null -> true
+                            existingArt != null && !existingArtInVolatileCache ->
+                                LocalArtworkResolver.isUsableCachedArtworkFile(existingArt)
+                            else -> false
+                        }
+                        val needsArtworkRefresh = when {
+                            existingStamp == null -> true
+                            existingArt != null && !existingArtUsable -> true
+                            existingArt == null && recheckMissingArtwork -> true
+                            else -> false
+                        }
                         val canFastReuse = existingStamp != null &&
+                            !needsArtworkRefresh &&
                             existingStamp.fileSizeBytes == size &&
                             existingStamp.durationMs > 0L &&
-                            (modMs <= 0L || existingStamp.lastModifiedMs == modMs) &&
-                            (existingStamp.artworkAsset == null || File(existingStamp.artworkAsset).exists())
+                            (modMs <= 0L || existingStamp.lastModifiedMs == modMs)
 
-                        if (!canFastReuse) {
+                        if (canFastReuse && migratedPersistentArt != null) {
+                            val existingFull = dao.getEpisodeById(stableId)
+                            if (existingFull != null) {
+                                batchWriter.addEpisode(existingFull.copy(artworkAsset = migratedPersistentArt))
+                                batchWriter.flushIfNeeded()
+                            }
+                        } else if (!canFastReuse) {
                             if (isPlaybackActive) {
                                 delay(12L)
                             }
@@ -783,7 +867,16 @@ class LocalMusicScanner(
                                 relativeFolderPath = relDir,
                             )
                             val existingFull = existingStamp?.let { dao.getEpisodeById(stableId) }
-                            val parsed = extractMetadataForDocument(file, folderKey, stableId, existingFull, now, index)
+                            val parsed = extractMetadataForDocument(
+                                file = file,
+                                folderUri = folderKey,
+                                stableId = stableId,
+                                existing = existingFull,
+                                now = now,
+                                index = index,
+                                folderCoverMemo = folderCoverMemo,
+                                forceReextractArtwork = needsArtworkRefresh,
+                            )
                             if (existingFull == null) addedCount++
                             batchWriter.add(parsed)
                             batchWriter.flushIfNeeded()
@@ -1021,6 +1114,7 @@ class LocalMusicScanner(
         val lastModified: Long,
         val relativeFolderPath: String = "",
         val sidecarLyricsUri: Uri? = null,
+        val folderCoverUri: Uri? = null,
     )
 
     private data class ExtractedLibraryBundle(
@@ -1079,6 +1173,8 @@ class LocalMusicScanner(
         existing: EpisodeEntity?,
         now: Long,
         index: Int,
+        folderCoverMemo: MutableMap<String, String?>? = null,
+        forceReextractArtwork: Boolean = false,
     ): ExtractedLibraryBundle {
         val detected = AudioFormatCatalog.detectFromUri(context, file.uri, file.displayName)
         val fallbackTitle = file.displayName.substringBeforeLast('.')
@@ -1099,11 +1195,23 @@ class LocalMusicScanner(
         var bitDepth = 0
         var bitrateKbps = 0
         var channels = 0
-        var artworkPath = existing?.artworkAsset
+        val fileModifiedOrResized = existing != null && (
+            existing.fileSizeBytes != file.sizeBytes ||
+                (file.lastModified > 0L && existing.lastModifiedMs != file.lastModified)
+            )
+        var artworkPath = if (forceReextractArtwork || fileModifiedOrResized) {
+            null
+        } else {
+            existing?.artworkAsset?.takeIf {
+                !it.startsWith(context.cacheDir.absolutePath) && LocalArtworkResolver.isUsableCachedArtworkFile(it)
+            }
+        }
 
+        var extractedArtworkViaResolver = artworkPath != null
         runCatching {
             context.contentResolver.openFileDescriptor(file.uri, "r")?.use { pfd ->
                 val props = runCatching {
+                    LocalArtworkResolver.rewindFd(pfd)
                     TagLib.getAudioProperties(pfd.dup().detachFd(), AudioPropertiesReadStyle.Fast)
                 }.getOrNull()
                 if (props != null) {
@@ -1113,44 +1221,69 @@ class LocalMusicScanner(
                     if (props.channels > 0) channels = props.channels
                 }
                 val meta = runCatching {
-                    TagLib.getMetadata(pfd.dup().detachFd(), /* readPictures = */ false)
+                    LocalArtworkResolver.rewindFd(pfd)
+                    TagLib.getMetadata(pfd.dup().detachFd(), /* readPictures = */ !extractedArtworkViaResolver)
                 }.getOrNull()
                 if (meta != null) {
                     val map = meta.propertyMap
-                    map["TITLE"]?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { title = it }
-                    map["ARTIST"]?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { artist = it }
-                    map["ALBUM"]?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { album = it }
-                    map["ALBUMARTIST"]?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { albumArtist = it }
-                    map["GENRE"]?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { genre = it }
-                    map["COMPOSER"]?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { composer = it }
-                    map["COMMENT"]?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { comment = it }
-                    val lyricsCandidate = map.entries
-                        .firstOrNull { (k, v) ->
-                            val upper = k.uppercase()
-                            (upper == "LYRICS" || upper == "UNSYNCEDLYRICS" || upper == "SYLT" ||
-                                upper.startsWith("LYRICS") || upper.startsWith("USLT")) &&
-                                v.any { it.isNotBlank() }
-                        }
-                        ?.value
-                        ?.firstOrNull { it.isNotBlank() }
+                    fun tagValue(key: String): String? = runCatching {
+                        val values: Array<String>? = map[key]
+                        values?.firstOrNull { v -> @Suppress("SENSELESS_COMPARISON") (v != null && v.isNotBlank()) }
+                    }.getOrNull()
+
+                    tagValue("TITLE")?.let { title = it }
+                    tagValue("ARTIST")?.let { artist = it }
+                    tagValue("ALBUM")?.let { album = it }
+                    tagValue("ALBUMARTIST")?.let { albumArtist = it }
+                    tagValue("GENRE")?.let { genre = it }
+                    tagValue("COMPOSER")?.let { composer = it }
+                    tagValue("COMMENT")?.let { comment = it }
+                    val lyricsCandidate = runCatching {
+                        map.entries
+                            .firstOrNull { (k, v) ->
+                                val keyStr: String? = k
+                                val vals: Array<String>? = v
+                                if (keyStr == null || vals == null) return@firstOrNull false
+                                val upper = keyStr.uppercase()
+                                (upper == "LYRICS" || upper == "UNSYNCEDLYRICS" || upper == "SYLT" ||
+                                    upper.startsWith("LYRICS") || upper.startsWith("USLT")) &&
+                                    vals.any { s -> @Suppress("SENSELESS_COMPARISON") (s != null && s.isNotBlank()) }
+                            }
+                            ?.value
+                            ?.firstOrNull { s -> @Suppress("SENSELESS_COMPARISON") (s != null && s.isNotBlank()) }
+                    }.getOrNull()
                     if (!lyricsCandidate.isNullOrBlank()) {
                         lyrics = lyricsCandidate
                     }
-                    map["DATE"]?.firstOrNull()?.take(4)?.toIntOrNull()?.let { year = it }
-                    map["TRACKNUMBER"]?.firstOrNull()?.substringBefore('/')?.toIntOrNull()?.let { trackNumber = it }
-                    map["DISCNUMBER"]?.firstOrNull()?.substringBefore('/')?.toIntOrNull()?.let { discNumber = it }
+                    tagValue("DATE")?.take(4)?.toIntOrNull()?.let { year = it }
+                    tagValue("TRACKNUMBER")?.substringBefore('/')?.toIntOrNull()?.let { trackNumber = it }
+                    tagValue("DISCNUMBER")?.substringBefore('/')?.toIntOrNull()?.let { discNumber = it }
                 }
-                val currentArt = artworkPath
-                if (currentArt == null || !File(currentArt).exists()) {
-                    val cover = runCatching { TagLib.getFrontCover(pfd.dup().detachFd()) }.getOrNull()
-                    if (cover != null && cover.data.isNotEmpty()) {
-                        artworkPath = saveDownsampledArtworkToCache(cover.data)
-                    }
+                if (!extractedArtworkViaResolver) {
+                    val metaPictures = runCatching { meta?.pictures }.getOrNull()
+                    artworkPath = artworkResolver.resolveAndCacheArtwork(
+                        audioUri = file.uri,
+                        existingFileDescriptor = pfd,
+                        folderCoverUri = file.folderCoverUri,
+                        folderCoverMemo = folderCoverMemo,
+                        preExtractedPictures = metaPictures?.takeIf { it.isNotEmpty() },
+                    )
+                    extractedArtworkViaResolver = true
                 }
             }
         }
 
-        if (durationMs <= 0L || artworkPath == null) {
+        if (!extractedArtworkViaResolver) {
+            artworkPath = artworkResolver.resolveAndCacheArtwork(
+                audioUri = file.uri,
+                existingFileDescriptor = null,
+                folderCoverUri = file.folderCoverUri,
+                folderCoverMemo = folderCoverMemo,
+            )
+            extractedArtworkViaResolver = true
+        }
+
+        if (durationMs <= 0L) {
             val retriever = MediaMetadataRetriever()
             try {
                 runCatching {
@@ -1171,18 +1304,32 @@ class LocalMusicScanner(
                         val bps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toIntOrNull() ?: 0
                         if (bps > 0) bitrateKbps = bps / 1000
                     }
-                    if (artworkPath == null) {
-                        retriever.embeddedPicture?.takeIf { it.isNotEmpty() }?.let { bytes ->
-                            artworkPath = saveDownsampledArtworkToCache(bytes)
-                        }
-                    }
                 }
             } finally {
                 runCatching { retriever.release() }
             }
         }
+        if (existing?.artworkAsset != artworkPath) {
+            com.podcasty.app.ui.components.invalidateArtworkCache(existing?.artworkAsset)
+            com.podcasty.app.ui.components.invalidateArtworkCache(artworkPath)
+        }
 
-        if (lyrics.isNullOrBlank() && file.sidecarLyricsUri != null) {
+        val currentLyrics = lyrics
+        if (currentLyrics.isNullOrBlank() || !com.podcasty.app.transcript.TranscriptParser.parse(stableId, currentLyrics).isTimed) {
+            val syltTrack = runCatching {
+                context.contentResolver.openInputStream(file.uri)?.use { input ->
+                    com.podcasty.app.transcript.Id3SyltParser.extractFromStream(input)
+                }
+            }.getOrNull()
+            if (syltTrack != null && syltTrack.cues.isNotEmpty()) {
+                lyrics = com.podcasty.app.transcript.TranscriptParser.toLrcString(syltTrack.cues)
+            }
+        }
+
+        val postSyltLyrics = lyrics
+        if (file.sidecarLyricsUri != null &&
+            (postSyltLyrics.isNullOrBlank() || !com.podcasty.app.transcript.TranscriptParser.parse(stableId, postSyltLyrics).isTimed)
+        ) {
             runCatching {
                 context.contentResolver.openInputStream(file.sidecarLyricsUri)?.use { input ->
                     val rawBytes = input.readBytes()
@@ -1195,8 +1342,10 @@ class LocalMusicScanner(
                         )
                         lyrics = if (parsedDoc.cues.isNotEmpty() && parsedDoc.isTimed) {
                             com.podcasty.app.transcript.TranscriptParser.toLrcString(parsedDoc.cues)
-                        } else {
+                        } else if (lyrics.isNullOrBlank()) {
                             decoded
+                        } else {
+                            lyrics
                         }
                     }
                 }
@@ -1306,49 +1455,10 @@ class LocalMusicScanner(
         return ExtractedLibraryBundle(host, category, podcast, episode)
     }
 
-    /**
-     * Downsamples oversized embedded covers to max 600px JPEG and deduplicates via SHA-256 content
-     * hash so tracks sharing an album cover share one small cached thumbnail on disk.
-     */
-    private fun saveDownsampledArtworkToCache(rawBytes: ByteArray): String? = runCatching {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, bounds)
-        val outBytes = if (bounds.outWidth > MaxCachedArtworkPx || bounds.outHeight > MaxCachedArtworkPx || rawBytes.size > 180 * 1024) {
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= MaxCachedArtworkPx &&
-                bounds.outHeight / (sample * 2) >= MaxCachedArtworkPx
-            ) {
-                sample *= 2
-            }
-            val bitmap = BitmapFactory.decodeByteArray(
-                rawBytes,
-                0,
-                rawBytes.size,
-                BitmapFactory.Options().apply { inSampleSize = sample },
-            ) ?: return null
-            try {
-                val baos = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 86, baos)
-                baos.toByteArray()
-            } finally {
-                bitmap.recycle()
-            }
-        } else {
-            rawBytes
-        }
-        val hash = shortHashBytes(outBytes)
-        val file = File(artworkCacheDir, "art_$hash.jpg")
-        if (!file.exists() || file.length() == 0L) {
-            file.writeBytes(outBytes)
-        }
-        file.absolutePath
-    }.getOrNull()
-
     companion object {
         private const val ScanBatchSize = 250
         private const val MaxDirectoryDepth = 32
         private const val MaxDirectoriesPerScan = 25_000
-        private const val MaxCachedArtworkPx = 600
         private const val ProgressEmitIntervalMs = 300L
         private val SidecarExtensions = setOf("lrc", "srt", "vtt")
 

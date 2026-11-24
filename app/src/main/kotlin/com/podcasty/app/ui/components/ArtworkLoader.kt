@@ -39,11 +39,36 @@ private val artworkCache = object : LruCache<String, ImageBitmap>(artworkCacheBu
         (value.asAndroidBitmap().allocationByteCount / 1024).coerceAtLeast(1)
 }
 
-private val failedArtworkKeys = LruCache<String, Boolean>(512)
+private val failedArtworkKeys = LruCache<String, Long>(512)
+private const val FailedArtworkRetryTtlMs = 30_000L
+
+@Volatile
+internal var onArtworkCacheInvalidated: ((String?) -> Unit)? = null
 
 fun clearArtworkMemoryCache() {
     artworkCache.evictAll()
     failedArtworkKeys.evictAll()
+    onArtworkCacheInvalidated?.invoke(null)
+}
+
+/**
+ * Evicts all cached thumbnail sizes and negative-cache entries for a specific artwork path
+ * (e.g., after tag editing, artwork replacement, file rename/move, or rescan repair).
+ */
+fun invalidateArtworkCache(artworkPath: String?) {
+    val normalized = artworkPath?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    val prefix = "$normalized:"
+    artworkCache.snapshot().keys.forEach { key ->
+        if (key == normalized || key.startsWith(prefix)) {
+            artworkCache.remove(key)
+        }
+    }
+    failedArtworkKeys.snapshot().keys.forEach { key ->
+        if (key == normalized || key.startsWith(prefix)) {
+            failedArtworkKeys.remove(key)
+        }
+    }
+    onArtworkCacheInvalidated?.invoke(normalized)
 }
 
 private const val MaxRemoteArtworkBytes = 2 * 1024 * 1024 // 2 MB cap for remote thumbnails/covers
@@ -242,11 +267,16 @@ fun rememberArtworkThumbnail(
     }
 
     LaunchedEffect(cacheKey) {
-        if (cacheKey == null || normalizedPath == null) {
+        if (cacheKey == null) {
             bitmap = null
             return@LaunchedEffect
         }
-        if (bitmap != null || failedArtworkKeys.get(cacheKey) == true) return@LaunchedEffect
+        val path = normalizedPath ?: return@LaunchedEffect
+        if (bitmap != null) return@LaunchedEffect
+        val failedAt = failedArtworkKeys.get(cacheKey)
+        if (failedAt != null && android.os.SystemClock.elapsedRealtime() - failedAt < FailedArtworkRetryTtlMs) {
+            return@LaunchedEffect
+        }
         val existing = inFlightArtworkLoads[cacheKey]
         val loaded = if (existing != null) {
             existing.await()
@@ -258,12 +288,13 @@ fun rememberArtworkThumbnail(
             } else {
                 try {
                     val decoded = withContext(Dispatchers.IO) {
-                        decodeArtworkBitmap(context, normalizedPath, targetPx)?.asImageBitmap()
+                        decodeArtworkBitmap(context, path, targetPx)?.asImageBitmap()
                     }
                     if (decoded != null) {
+                        failedArtworkKeys.remove(cacheKey)
                         artworkCache.put(cacheKey, decoded)
                     } else {
-                        failedArtworkKeys.put(cacheKey, true)
+                        failedArtworkKeys.put(cacheKey, android.os.SystemClock.elapsedRealtime())
                     }
                     created.complete(decoded)
                     decoded

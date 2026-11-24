@@ -340,6 +340,8 @@ class MusicFileManager(
                         title = finalDisplayName.substringBeforeLast('.'),
                         lastModifiedMs = System.currentTimeMillis(),
                     )
+                    com.podcasty.app.ui.components.invalidateArtworkCache(episode.artworkAsset)
+                    scanner.startBackgroundScanFolder(destTreeUri)
                     return@withContext FileOperationResult.Success("Moved to $finalDisplayName", listOf(episode.id))
                 }
                 val consentSender = sourceDeleted.consentSender

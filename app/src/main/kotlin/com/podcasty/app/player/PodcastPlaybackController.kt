@@ -4,11 +4,19 @@
  */
 package com.podcasty.app.player
 
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -42,9 +50,11 @@ import com.podcasty.app.streaming.YouTubeAudioStream
 import com.podcasty.app.streaming.YouTubeAudioStreamResolver
 import com.podcasty.app.transcript.CaptionSyncEngine
 import com.podcasty.app.transcript.CaptionSyncSnapshot
+import com.podcasty.app.transcript.Id3SyltParser
 import com.podcasty.app.transcript.TranscriptDocument
 import com.podcasty.app.transcript.TranscriptParser
 import com.podcasty.app.transcript.TranscriptSource
+import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -165,6 +175,37 @@ class PodcastPlaybackController(
     private var showLockScreenCaptions: Boolean = false
     private var showTranscriptNotification: Boolean = false
     private var showLockScreenLyrics: Boolean = true
+    private var lockScreenLyricsExpanded: Boolean = true
+    private var showLyricsTranslation: Boolean = true
+    @Volatile
+    private var isScreenInteractive: Boolean = true
+    private var screenStateReceiverRegistered: Boolean = false
+
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            val interactive = when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> false
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> true
+                else -> (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive ?: true
+            }
+            if (isScreenInteractive == interactive && intent?.action != Intent.ACTION_USER_PRESENT) return
+            isScreenInteractive = interactive
+            lockScreenLyricsNotificationController.onScreenInteractiveChanged(interactive)
+            if (interactive) {
+                val controller = mediaController
+                if (controller != null && currentItem != null) {
+                    val pos = controller.currentPosition.coerceAtLeast(0L)
+                    _playbackPositionMs.value = pos
+                    captionSyncEngine.onPositionChanged(pos)
+                }
+                syncLyricsAndCaptionNotifications()
+            }
+            if (mediaController?.isPlaying == true) {
+                stopTicker()
+                updateTicker()
+            }
+        }
+    }
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -347,6 +388,16 @@ class PodcastPlaybackController(
     }
 
     init {
+        isScreenInteractive = (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive ?: true
+        runCatching {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+            ContextCompat.registerReceiver(context, screenStateReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            screenStateReceiverRegistered = true
+        }
         scope.launch {
             preferences.settings.collect { settings ->
                 skipBackwardSec = settings.skipBackwardSeconds
@@ -360,10 +411,16 @@ class PodcastPlaybackController(
                 showLockScreenCaptions = settings.showLockScreenCaptions
                 showTranscriptNotification = settings.showTranscriptNotification
                 showLockScreenLyrics = settings.showLockScreenLyrics
+                lockScreenLyricsExpanded = settings.lockScreenLyricsExpanded
+                showLyricsTranslation = settings.showLyricsTranslation
                 if (currentItem == null) {
                     _playbackSpeed.value = settings.defaultPlaybackSpeed
                 }
                 syncLyricsAndCaptionNotifications()
+                if (mediaController?.isPlaying == true) {
+                    stopTicker()
+                    updateTicker()
+                }
                 preloadNextGaplessItemIfNeeded()
             }
         }
@@ -609,9 +666,52 @@ class PodcastPlaybackController(
         val targetId = episodeId ?: currentEpisode?.id ?: return
         if (currentEpisode?.id != targetId) return
         scope.launch {
-            val refreshed = repository.getEpisodeById(targetId)
-            if (refreshed != null && currentEpisode?.id == targetId) {
-                currentEpisode = refreshed
+            val refreshed = repository.getEpisodeById(targetId) ?: return@launch
+            if (currentEpisode?.id != targetId) return@launch
+            val oldArtwork = currentItem?.artworkAsset
+            currentEpisode = refreshed
+            val updatedItem = currentItem?.copy(
+                title = refreshed.title,
+                podcastTitle = refreshed.podcastTitle,
+                hostName = refreshed.hostName,
+                artworkAsset = refreshed.artworkAsset,
+                audioAsset = refreshed.audioAsset,
+                sourceUri = refreshed.sourceUri,
+                linkedAudioUri = refreshed.linkedAudioUri,
+            )
+            if (updatedItem != null && updatedItem != currentItem) {
+                currentItem = updatedItem
+                if (oldArtwork != updatedItem.artworkAsset) {
+                    com.podcasty.app.ui.components.invalidateArtworkCache(oldArtwork)
+                    com.podcasty.app.ui.components.invalidateArtworkCache(updatedItem.artworkAsset)
+                }
+                val prev = _playbackState.value
+                _playbackState.value = when (prev) {
+                    is PlaybackState.Playing -> prev.copy(item = updatedItem)
+                    is PlaybackState.Paused -> prev.copy(item = updatedItem)
+                    is PlaybackState.Preparing -> prev.copy(item = updatedItem)
+                    is PlaybackState.Failed -> prev.copy(item = updatedItem)
+                    else -> prev
+                }
+                // Seamlessly sync Media3 lock-screen / notification metadata without interrupting audio
+                val controller = mediaController
+                val activeMediaItem = controller?.currentMediaItem
+                val activeUri = activeMediaItem?.localConfiguration?.uri?.toString()
+                if (controller != null && activeMediaItem?.mediaId == targetId && !activeUri.isNullOrBlank()) {
+                    val artworkData = loadArtworkBytesForMediaSession(refreshed.artworkAsset)
+                    if (currentEpisode?.id == targetId && controller.currentMediaItem?.mediaId == targetId) {
+                        val nextMediaItem = buildMediaItem(
+                            episode = refreshed,
+                            playbackUriStr = activeUri,
+                            mimeType = activeMediaItem.localConfiguration?.mimeType,
+                            artworkData = artworkData,
+                        )
+                        runCatching {
+                            controller.replaceMediaItem(controller.currentMediaItemIndex, nextMediaItem)
+                        }
+                    }
+                }
+                syncLyricsAndCaptionNotifications()
             }
         }
     }
@@ -1191,6 +1291,7 @@ class PodcastPlaybackController(
         }
 
         _playbackState.value = PlaybackState.Preparing(item)
+        val mediaArtworkData = loadArtworkBytesForMediaSession(episode.artworkAsset)
 
         val applyToController: () -> Unit = {
             val controller = mediaController
@@ -1199,6 +1300,7 @@ class PodcastPlaybackController(
                     episode = episode,
                     playbackUriStr = playbackUriStr,
                     formatHint = formatHint,
+                    artworkData = mediaArtworkData,
                 )
                 controller.setMediaItem(mediaItem, startPositionMs.coerceAtLeast(0L))
                 controller.playbackParameters = PlaybackParameters(_playbackSpeed.value)
@@ -1262,6 +1364,7 @@ class PodcastPlaybackController(
         )
         currentItem = resolvedItem
         _playbackState.value = PlaybackState.Preparing(resolvedItem)
+        val mediaArtworkData = loadArtworkBytesForMediaSession(episode.artworkAsset)
 
         val applyToController: () -> Unit = {
             val controller = mediaController
@@ -1271,6 +1374,7 @@ class PodcastPlaybackController(
                     playbackUriStr = stream.url,
                     mimeType = stream.mimeType,
                     isYouTubeStream = true,
+                    artworkData = mediaArtworkData,
                 )
                 controller.setMediaItem(mediaItem, startPositionMs.coerceAtLeast(0L))
                 controller.playbackParameters = PlaybackParameters(_playbackSpeed.value)
@@ -1331,37 +1435,39 @@ class PodcastPlaybackController(
         }
         // Sidecar (.lrc/.srt/.vtt) or embedded TagLib lyrics fallback for local/downloaded audio files
         val audioUriForTags = episode.editableAudioUri
-        if (docs.isEmpty() && !audioUriForTags.isNullOrBlank()) {
+        val hasTimedDocAlready = docs.any { it.isTimed }
+        if (!hasTimedDocAlready && !audioUriForTags.isNullOrBlank()) {
             val sidecarDoc = readSidecarTranscriptIfPresent(episode, audioUriForTags)
-            if (sidecarDoc != null) {
-                docs += sidecarDoc
+            if (sidecarDoc != null && sidecarDoc.cues.isNotEmpty()) {
+                docs.add(0, sidecarDoc)
             } else {
-                val embeddedLyrics = readEmbeddedLyricsFromAudioUri(audioUriForTags)
-                if (!embeddedLyrics.isNullOrBlank()) {
-                    docs += TranscriptParser.parse(
-                        episodeId = episode.id,
-                        content = embeddedLyrics,
-                        language = episode.transcriptLanguage,
-                        source = TranscriptSource.EmbeddedTag,
-                    )
+                val embeddedDoc = readEmbeddedLyricsDocFromAudioUri(episode, audioUriForTags)
+                if (embeddedDoc != null && embeddedDoc.cues.isNotEmpty()) {
+                    if (embeddedDoc.isTimed) docs.add(0, embeddedDoc) else if (docs.isEmpty()) docs += embeddedDoc
                 }
             }
         }
         _availableTranscripts.value = docs
         val pref = preferredTranscriptLanguage.trim()
         val chosen = if (pref.isEmpty() || pref.equals("auto", ignoreCase = true)) {
-            docs.firstOrNull()
+            docs.firstOrNull { it.isTimed } ?: docs.firstOrNull()
         } else {
-            docs.firstOrNull { it.language.equals(pref, ignoreCase = true) }
+            docs.firstOrNull { it.language.equals(pref, ignoreCase = true) && it.isTimed }
                 ?: docs.firstOrNull {
-                    it.language.substringBefore('-').equals(pref.substringBefore('-'), ignoreCase = true)
+                    it.language.substringBefore('-').equals(pref.substringBefore('-'), ignoreCase = true) && it.isTimed
                 }
+                ?: docs.firstOrNull { it.isTimed }
+                ?: docs.firstOrNull { it.language.equals(pref, ignoreCase = true) }
                 ?: docs.firstOrNull()
         }
         _activeTranscriptDocument.value = chosen
         if (chosen != null) {
             captionSyncEngine.loadDocument(chosen, initialPositionMs)
             syncLyricsAndCaptionNotifications()
+            if (mediaController?.isPlaying == true) {
+                stopTicker()
+                updateTicker()
+            }
         } else {
             captionSyncEngine.clear()
             syncLyricsAndCaptionNotifications()
@@ -1404,54 +1510,175 @@ class PodcastPlaybackController(
 
     private suspend fun readSidecarTranscriptIfPresent(episode: Episode, audioUriStr: String): TranscriptDocument? =
         withContext(Dispatchers.IO) {
-            val filePath = when {
+            // 1. Direct filesystem path or file:// URI
+            val directFilePath = when {
                 audioUriStr.startsWith("/") -> audioUriStr
                 audioUriStr.startsWith("file://", ignoreCase = true) -> Uri.parse(audioUriStr).path
                 else -> null
-            } ?: return@withContext null
-            val audioFile = File(filePath)
-            val parent = audioFile.parentFile ?: return@withContext null
-            val baseName = audioFile.nameWithoutExtension
-            val candidate = listOf("lrc", "srt", "vtt")
-                .asSequence()
-                .map { ext -> File(parent, "$baseName.$ext") }
-                .firstOrNull { it.exists() && it.isFile && it.canRead() }
-                ?: return@withContext null
-            val raw = runCatching { candidate.readText(Charsets.UTF_8) }.getOrNull()?.takeIf { it.isNotBlank() }
-                ?: return@withContext null
-            TranscriptParser.parse(
-                episodeId = episode.id,
-                content = raw,
-                language = episode.transcriptLanguage,
-                source = TranscriptSource.AuthorizedImport,
-            )
+            }
+            if (!directFilePath.isNullOrBlank()) {
+                readSiblingSidecarFromPath(episode, directFilePath)?.let { return@withContext it }
+            }
+
+            // 2. SAF content:// tree document URI (e.g. primary:Music/Tamil/song.mp3 -> sibling song.lrc)
+            val uri = runCatching { Uri.parse(audioUriStr) }.getOrNull() ?: return@withContext null
+            if (uri.scheme.equals("content", ignoreCase = true)) {
+                readSiblingSidecarFromSafUri(episode, uri)?.let { return@withContext it }
+                // 3. MediaStore content://media/... URI fallback via DATA column if accessible
+                readSiblingSidecarFromMediaStoreUri(episode, uri)?.let { return@withContext it }
+            }
+            null
         }
 
-    private suspend fun readEmbeddedLyricsFromAudioUri(audioUriStr: String): String? =
+    private fun readSiblingSidecarFromPath(episode: Episode, filePath: String): TranscriptDocument? {
+        val audioFile = File(filePath)
+        val parent = audioFile.parentFile ?: return null
+        val baseName = audioFile.nameWithoutExtension
+        val candidate = listOf("lrc", "srt", "vtt")
+            .asSequence()
+            .flatMap { ext -> sequenceOf(File(parent, "$baseName.$ext"), File(parent, "$baseName.${ext.uppercase()}")) }
+            .firstOrNull { it.exists() && it.isFile && it.canRead() }
+            ?: return null
+        val raw = runCatching { TranscriptParser.decodeBytesToUnicode(candidate.readBytes()) }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        return TranscriptParser.parse(
+            episodeId = episode.id,
+            content = raw,
+            fileName = candidate.name,
+            language = episode.transcriptLanguage,
+            source = TranscriptSource.AuthorizedImport,
+        )
+    }
+
+    private fun readSiblingSidecarFromSafUri(episode: Episode, docUri: Uri): TranscriptDocument? = runCatching {
+        if (!DocumentsContract.isDocumentUri(context, docUri)) return@runCatching null
+        val docId = DocumentsContract.getDocumentId(docUri)
+        val slashIdx = docId.lastIndexOf('/')
+        val parentDocId = when {
+            slashIdx > 0 -> docId.substring(0, slashIdx)
+            docId.contains(':') -> docId.substringBefore(':') + ":"
+            else -> return@runCatching null
+        }
+        val audioDisplayName = episode.audioAsset.ifBlank { docId.substringAfterLast('/') }
+        val baseName = audioDisplayName.substringBeforeLast('.')
+        if (baseName.isBlank()) return@runCatching null
+        val targetNames = listOf("$baseName.lrc", "$baseName.srt", "$baseName.vtt")
+            .map { it.lowercase() }
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(docUri, parentDocId)
+        var bestMatch: Pair<Int, Pair<String, String>>? = null // priority to (childDocId, displayName)
+        context.contentResolver.query(
+            childrenUri,
+            arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            if (idCol < 0 || nameCol < 0) return@use
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameCol) ?: continue
+                val priority = targetNames.indexOf(name.lowercase())
+                if (priority >= 0 && (bestMatch == null || priority < bestMatch!!.first)) {
+                    val childId = cursor.getString(idCol) ?: continue
+                    bestMatch = priority to (childId to name)
+                    if (priority == 0) break
+                }
+            }
+        }
+        val (_, match) = bestMatch ?: return@runCatching null
+        val sidecarUri = DocumentsContract.buildDocumentUriUsingTree(docUri, match.first)
+        val raw = context.contentResolver.openInputStream(sidecarUri)?.use { input ->
+            TranscriptParser.decodeBytesToUnicode(input.readBytes())
+        }?.takeIf { it.isNotBlank() } ?: return@runCatching null
+        TranscriptParser.parse(
+            episodeId = episode.id,
+            content = raw,
+            fileName = match.second,
+            language = episode.transcriptLanguage,
+            source = TranscriptSource.AuthorizedImport,
+        )
+    }.getOrNull()
+
+    private fun readSiblingSidecarFromMediaStoreUri(episode: Episode, mediaUri: Uri): TranscriptDocument? = runCatching {
+        if (mediaUri.authority != MediaStore.AUTHORITY) return@runCatching null
+        @Suppress("DEPRECATION")
+        val dataPath = context.contentResolver.query(
+            mediaUri,
+            arrayOf(MediaStore.Audio.Media.DATA),
+            null,
+            null,
+            null,
+        )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        if (dataPath.isNullOrBlank()) null else readSiblingSidecarFromPath(episode, dataPath)
+    }.getOrNull()
+
+    private suspend fun readEmbeddedLyricsDocFromAudioUri(episode: Episode, audioUriStr: String): TranscriptDocument? =
         withContext(Dispatchers.IO) {
-            runCatching {
-                val pfd = when {
-                    audioUriStr.startsWith("/") -> android.os.ParcelFileDescriptor.open(
-                        File(audioUriStr),
-                        android.os.ParcelFileDescriptor.MODE_READ_ONLY,
-                    )
-                    audioUriStr.startsWith("file://", ignoreCase = true) -> {
-                        val file = File(Uri.parse(audioUriStr).path.orEmpty())
-                        if (!file.exists()) return@withContext null
-                        android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
-                    }
-                    audioUriStr.startsWith("content://", ignoreCase = true) ->
-                        context.contentResolver.openFileDescriptor(Uri.parse(audioUriStr), "r")
-                    else -> null
-                } ?: return@withContext null
+            val tagLyrics = runCatching {
+                val pfd = openReadOnlyPfd(audioUriStr) ?: return@runCatching null
                 pfd.use { descriptor ->
                     val map = com.kyant.taglib.TagLib.getMetadata(descriptor.dup().detachFd(), false)?.propertyMap
-                    map?.get("LYRICS")?.firstOrNull()?.takeIf { it.isNotBlank() }
-                        ?: map?.get("UNSYNCEDLYRICS")?.firstOrNull()?.takeIf { it.isNotBlank() }
-                        ?: map?.get("SYLT")?.firstOrNull()?.takeIf { it.isNotBlank() }
+                    map?.entries
+                        ?.firstOrNull { (k, v) ->
+                            val upper = k.uppercase()
+                            (upper == "LYRICS" || upper == "UNSYNCEDLYRICS" || upper == "SYLT" ||
+                                upper.startsWith("LYRICS") || upper.startsWith("USLT")) &&
+                                v.any { it.isNotBlank() }
+                        }
+                        ?.value
+                        ?.firstOrNull { it.isNotBlank() }
                 }
             }.getOrNull()
+
+            val tagDoc = tagLyrics?.let {
+                TranscriptParser.parse(
+                    episodeId = episode.id,
+                    content = it,
+                    language = episode.transcriptLanguage,
+                    source = TranscriptSource.EmbeddedTag,
+                )
+            }
+            if (tagDoc != null && tagDoc.isTimed) return@withContext tagDoc
+
+            // Fallback: parse raw ID3v2 SYLT binary frames directly when TagLib doesn't expose timed lyrics
+            val syltTrack = runCatching {
+                val stream = when {
+                    audioUriStr.startsWith("/") -> File(audioUriStr).takeIf { it.exists() }?.inputStream()
+                    audioUriStr.startsWith("file://", ignoreCase = true) ->
+                        File(Uri.parse(audioUriStr).path.orEmpty()).takeIf { it.exists() }?.inputStream()
+                    audioUriStr.startsWith("content://", ignoreCase = true) ->
+                        context.contentResolver.openInputStream(Uri.parse(audioUriStr))
+                    else -> null
+                } ?: return@runCatching null
+                stream.use { Id3SyltParser.extractFromStream(it) }
+            }.getOrNull()
+            if (syltTrack != null && syltTrack.cues.isNotEmpty()) {
+                return@withContext TranscriptDocument(
+                    episodeId = episode.id,
+                    language = syltTrack.language,
+                    format = com.podcasty.app.transcript.TranscriptFormat.Lrc,
+                    source = TranscriptSource.EmbeddedTag,
+                    cues = syltTrack.cues,
+                )
+            }
+            tagDoc
         }
+
+    private fun openReadOnlyPfd(audioUriStr: String): android.os.ParcelFileDescriptor? = when {
+        audioUriStr.startsWith("/") -> android.os.ParcelFileDescriptor.open(
+            File(audioUriStr),
+            android.os.ParcelFileDescriptor.MODE_READ_ONLY,
+        )
+        audioUriStr.startsWith("file://", ignoreCase = true) -> {
+            val file = File(Uri.parse(audioUriStr).path.orEmpty())
+            if (!file.exists()) null
+            else android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+        }
+        audioUriStr.startsWith("content://", ignoreCase = true) ->
+            context.contentResolver.openFileDescriptor(Uri.parse(audioUriStr), "r")
+        else -> null
+    }
 
     private fun syncLyricsAndCaptionNotifications() {
         val item = currentItem
@@ -1486,6 +1713,9 @@ class PodcastPlaybackController(
                 isPlaying = isPlaying,
                 isPaused = isPaused,
                 enabled = showLockScreenLyrics,
+                expandedMode = lockScreenLyricsExpanded,
+                showTranslation = showLyricsTranslation,
+                isScreenInteractive = isScreenInteractive,
             )
         }
     }
@@ -1670,15 +1900,24 @@ class PodcastPlaybackController(
             lastTickTimestampMs = System.currentTimeMillis()
             positionTickerJob = scope.launch {
                 while (isActive) {
-                    val hasUiCollectors = _playbackPositionMs.subscriptionCount.value > 0
-                    val baseDelayMs = if (hasUiCollectors) {
-                        (180f / _playbackSpeed.value.coerceIn(0.5f, 2.5f)).toLong().coerceIn(70L, 180L)
-                    } else {
-                        500L
-                    }
+                    val hasUiCollectors = _playbackPositionMs.subscriptionCount.value > 0 ||
+                        captionSyncEngine.hasActiveSubscribers
+                    val snapshot = captionSyncEngine.snapshot.value
+                    val lockScreenNotifActive = isScreenInteractive && snapshot.isTimed && (
+                        (currentItem?.sourceType != MediaSourceType.RssPodcast && showLockScreenLyrics) ||
+                            (currentItem?.sourceType == MediaSourceType.RssPodcast && (showLockScreenCaptions || showTranscriptNotification))
+                        )
+                    val baseDelayMs = computeBackgroundTickerDelayMs(
+                        hasUiCollectors = hasUiCollectors,
+                        isScreenInteractive = isScreenInteractive,
+                        lockScreenLyricsActive = lockScreenNotifActive,
+                        currentPositionMs = _playbackPositionMs.value,
+                        nextCueStartMs = snapshot.nextCueStartMs,
+                        playbackSpeed = _playbackSpeed.value,
+                    )
                     delay(baseDelayMs)
                     val now = System.currentTimeMillis()
-                    val deltaSec = ((now - lastTickTimestampMs).coerceIn(0L, 1_000L)) / 1000.0
+                    val deltaSec = ((now - lastTickTimestampMs).coerceIn(0L, 30_000L)) / 1000.0
                     lastTickTimestampMs = now
                     val controller = mediaController
                     if (controller?.isPlaying == true) {
@@ -1749,12 +1988,50 @@ class PodcastPlaybackController(
         context.contentResolver.openAssetFileDescriptor(Uri.parse(uriString), "r")?.use { true } ?: false
     }.getOrDefault(false)
 
+    private suspend fun loadArtworkBytesForMediaSession(artworkAsset: String?): ByteArray? =
+        withContext(Dispatchers.IO) {
+            val path = artworkAsset?.takeIf { it.isNotBlank() } ?: return@withContext null
+            val file = when {
+                path.startsWith("/") -> File(path)
+                path.startsWith("file://", ignoreCase = true) -> File(Uri.parse(path).path.orEmpty())
+                else -> return@withContext null
+            }
+            if (!file.exists() || !file.isFile || file.length() <= 0L) return@withContext null
+            runCatching {
+                val raw = file.readBytes()
+                if (raw.size <= 384 * 1024) {
+                    return@runCatching raw
+                }
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= 512 && bounds.outHeight / (sample * 2) >= 512) {
+                    sample *= 2
+                }
+                val decoded = BitmapFactory.decodeByteArray(
+                    raw,
+                    0,
+                    raw.size,
+                    BitmapFactory.Options().apply { inSampleSize = sample },
+                ) ?: return@runCatching null
+                try {
+                    ByteArrayOutputStream().use { out ->
+                        decoded.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                        out.toByteArray()
+                    }
+                } finally {
+                    decoded.recycle()
+                }
+            }.getOrNull()
+        }
+
     private fun buildMediaItem(
         episode: Episode,
         playbackUriStr: String,
         mimeType: String? = null,
         formatHint: String? = null,
         isYouTubeStream: Boolean = false,
+        artworkData: ByteArray? = null,
     ): MediaItem {
         val extras = Bundle().apply {
             if (isYouTubeStream) putBoolean(PodcastPlaybackService.ExtraYouTubeStream, true)
@@ -1771,18 +2048,19 @@ class PodcastPlaybackController(
                 else -> null
             }
         }
+        val metadataBuilder = MediaMetadata.Builder()
+            .setTitle(episode.title)
+            .setArtist(episode.hostName)
+            .setAlbumTitle(episode.podcastTitle)
+            .setArtworkUri(artworkUri)
+            .setExtras(extras)
+        if (artworkData != null && artworkData.isNotEmpty()) {
+            metadataBuilder.setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+        }
         val builder = MediaItem.Builder()
             .setMediaId(episode.id)
             .setUri(Uri.parse(playbackUriStr))
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(episode.title)
-                    .setArtist(episode.hostName)
-                    .setAlbumTitle(episode.podcastTitle)
-                    .setArtworkUri(artworkUri)
-                    .setExtras(extras)
-                    .build(),
-            )
+            .setMediaMetadata(metadataBuilder.build())
         if (!mimeType.isNullOrBlank()) {
             builder.setMimeType(mimeType)
         }
@@ -1861,11 +2139,13 @@ class PodcastPlaybackController(
             }
             if (latestSnapshot.activeEpisodeIds.getOrNull(latestNextIdx) != nextEpisodeId) return@launch
             trimTrailingMediaItems(activeController)
+            val nextArtworkData = loadArtworkBytesForMediaSession(nextEpisode.artworkAsset)
             activeController.addMediaItem(
                 buildMediaItem(
                     episode = nextEpisode,
                     playbackUriStr = nextUri,
                     formatHint = formatHint,
+                    artworkData = nextArtworkData,
                 ),
             )
         }
@@ -1960,6 +2240,10 @@ class PodcastPlaybackController(
 
     fun release() {
         stopTicker()
+        if (screenStateReceiverRegistered) {
+            runCatching { context.unregisterReceiver(screenStateReceiver) }
+            screenStateReceiverRegistered = false
+        }
         gaplessPreloadJob?.cancel()
         prepareEpisodeJob?.cancel()
         transcriptLoadJob?.cancel()
@@ -2012,6 +2296,37 @@ internal fun resolveGuardedSeekPosition(
         return GuardedSeekPositionResult(positionMs = safeTarget, matchedTarget = false, guardCleared = false)
     }
     return GuardedSeekPositionResult(positionMs = safeRaw, matchedTarget = false, guardCleared = true)
+}
+
+/**
+ * Computes the optimal sleep delay for PodcastPlaybackController's position ticker:
+ * - Active foreground UI collectors: smooth 70–180ms cadence scaled by playback speed.
+ * - Backgrounded with screen ON and timed lock-screen lyrics active: sleeps directly until the
+ *   next lyric cue boundary (clamped 180ms..5000ms) instead of polling blindly.
+ * - Screen OFF or no timed lock-screen lyrics active: sleeps 15s (purely for periodic listening
+ *   progress persistence), eliminating ~97% of background CPU wakeups.
+ */
+internal fun computeBackgroundTickerDelayMs(
+    hasUiCollectors: Boolean,
+    isScreenInteractive: Boolean,
+    lockScreenLyricsActive: Boolean,
+    currentPositionMs: Long,
+    nextCueStartMs: Long?,
+    playbackSpeed: Float,
+): Long {
+    val speed = playbackSpeed.coerceIn(0.5f, 2.5f)
+    if (hasUiCollectors) {
+        return (180f / speed).toLong().coerceIn(70L, 180L)
+    }
+    if (!isScreenInteractive || !lockScreenLyricsActive) {
+        return 15_000L
+    }
+    if (nextCueStartMs == null) {
+        return 5_000L
+    }
+    val remainingTrackMs = (nextCueStartMs - currentPositionMs).coerceAtLeast(0L)
+    val wallMs = (remainingTrackMs / speed).toLong()
+    return wallMs.coerceIn(180L, 5_000L)
 }
 
 /**

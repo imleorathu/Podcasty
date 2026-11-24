@@ -144,6 +144,47 @@ class ScanCoordinator(
         }
     }
 
+    /**
+     * One-time background upgrade pass when LocalArtworkResolver improves (e.g., APIC type=0,
+     * folder cover detection, persistent filesDir cache). Re-checks missing or volatile-cached
+     * artwork once without disrupting existing tracks, then records the upgraded version.
+     */
+    fun syncArtworkUpgradeIfNeeded(
+        currentResolverVersion: Int,
+        includeSubfolders: Boolean,
+        onUpgraded: suspend () -> Unit,
+    ) {
+        if (currentResolverVersion >= com.podcasty.app.storage.LocalArtworkResolver.CurrentArtworkResolverVersion) {
+            return
+        }
+        coordinatorScope.launch {
+            val enabledFolders = dao.getAllMusicFolders().filter { it.isEnabled }
+            if (enabledFolders.isEmpty()) {
+                onUpgraded()
+                return@launch
+            }
+            mutex.withLock {
+                if (activeFullScanJob?.isActive == true) return@withLock
+                StorageLog.info("ScanCoordinator", "Running one-time artwork resolver upgrade scan (v$currentResolverVersion -> v${com.podcasty.app.storage.LocalArtworkResolver.CurrentArtworkResolverVersion})")
+                LibraryIndexingService.start(context)
+                activeFullScanJob = coordinatorScope.launch {
+                    try {
+                        permissionMonitor.validatePersistedFolders()
+                        val res = scanner.scanAllFoldersInternal(
+                            includeSubfoldersOverride = includeSubfolders,
+                            recheckMissingArtwork = true,
+                        )
+                        if (res.lastError == null) {
+                            onUpgraded()
+                        }
+                    } finally {
+                        mutex.withLock { activeFullScanJob = null }
+                    }
+                }
+            }
+        }
+    }
+
     fun requestFullScan(includeSubfoldersOverride: Boolean? = null) {
         coordinatorScope.launch {
             mutex.withLock {
@@ -155,7 +196,10 @@ class ScanCoordinator(
                 activeFullScanJob = coordinatorScope.launch {
                     try {
                         permissionMonitor.validatePersistedFolders()
-                        scanner.scanAllFoldersInternal(includeSubfoldersOverride)
+                        scanner.scanAllFoldersInternal(
+                            includeSubfoldersOverride = includeSubfoldersOverride,
+                            recheckMissingArtwork = true,
+                        )
                     } finally {
                         mutex.withLock { activeFullScanJob = null }
                     }
@@ -179,7 +223,11 @@ class ScanCoordinator(
                 LibraryIndexingService.start(context)
                 val job = coordinatorScope.launch {
                     try {
-                        val result = scanner.scanFolderInternal(treeUri, includeSubfolders)
+                        val result = scanner.scanFolderInternal(
+                            treeUri = treeUri,
+                            includeSubfolders = includeSubfolders,
+                            recheckMissingArtwork = true,
+                        )
                         onFinished?.invoke(result)
                     } finally {
                         mutex.withLock { activeFolderJobs.remove(key) }
@@ -200,7 +248,7 @@ class ScanCoordinator(
                 LibraryIndexingService.start(context)
                 activeMediaStoreJob = coordinatorScope.launch {
                     try {
-                        val result = scanner.scanMediaStoreAudioInternal()
+                        val result = scanner.scanMediaStoreAudioInternal(recheckMissingArtwork = true)
                         onFinished?.invoke(result)
                     } finally {
                         mutex.withLock { activeMediaStoreJob = null }
